@@ -29,7 +29,7 @@ export class Store<T extends object> {
 }
 
 export type Phase = 'landing' | 'building' | 'city';
-export type Tab = 'districts' | 'venues' | 'landmarks' | 'artists' | 'passport';
+export type Tab = 'districts' | 'venues' | 'landmarks' | 'artists' | 'passport' | 'tours';
 
 export interface AppState {
   phase: Phase;

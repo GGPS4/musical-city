@@ -9,6 +9,9 @@ import type {
   BridgePlan,
   BuildingPlan,
   BuskerPlan,
+  BillboardPlan,
+  HomePlan,
+  StreetPlan,
   Instrument,
   LabelTowerPlan,
   CityPlan,
@@ -62,6 +65,65 @@ const INSTRUMENTS: Record<GenreId, Instrument[]> = {
   reggae: ['drums', 'guitar'],
   pop: ['mic', 'keys'],
 };
+
+/** Song titles that make odd street names. */
+const BAD_STREET = /heroin|cocaine|kill|suicide|nazi|gun|bitch|shit|fuck/i;
+
+const STREET_SUFFIX: Record<GenreId, string> = {
+  punk: 'Street',
+  'post-punk': 'Row',
+  'classic-rock': 'Avenue',
+  psychedelic: 'Lane',
+  alternative: 'Road',
+  glam: 'Boulevard',
+  garage: 'Alley',
+  electronic: 'Way',
+  'new-wave': 'Drive',
+  'art-rock': 'Walk',
+  'hard-rock': 'Highway',
+  indie: 'Lane',
+  metal: 'Road',
+  'hip-hop': 'Boulevard',
+  jazz: 'Avenue',
+  soul: 'Street',
+  reggae: 'Road',
+  pop: 'Parade',
+};
+
+const HOME_STYLE: Partial<Record<GenreId, HomePlan['style']>> = {
+  'hip-hop': 'studio',
+  electronic: 'studio',
+  'new-wave': 'studio',
+  punk: 'loft',
+  'post-punk': 'loft',
+  indie: 'loft',
+  alternative: 'loft',
+  garage: 'loft',
+  metal: 'loft',
+  'hard-rock': 'loft',
+};
+
+/**
+ * Open street corners (not inside a building, venue or the river) where a
+ * performer can stand. Used by buskers and by your own street performance.
+ */
+export function openCorners(plan: CityPlan): { p: Vec2; rot: number }[] {
+  const inset = (plan.pitch - plan.road) / 2 - 0.7;
+  const out: { p: Vec2; rot: number }[] = [];
+  const taken = [...plan.buskers.map((b) => b.position), ...plan.homes.map((h) => h.position)];
+  for (const b of plan.blocks) {
+    if (b.use !== 'buildings' && b.use !== 'park') continue;
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      const p = { x: b.center.x + sx * inset, z: b.center.z + sz * inset };
+      if (plan.buildings.some((x) => Math.abs(p.x - x.position.x) < x.width / 2 + 0.7 && Math.abs(p.z - x.position.z) < x.depth / 2 + 0.7)) continue;
+      if (plan.venues.some((v) => dist(v.position, p) < v.footprint * 0.75 + 1)) continue;
+      if (taken.some((t) => dist(t, p) < 6)) continue;
+      if (distToPolyline(p, plan.river.points).d < plan.river.width / 2 + 2) continue;
+      out.push({ p, rot: Math.atan2(sx, sz) });
+    }
+  }
+  return out;
+}
 
 export interface TasteInput {
   artists: Artist[];
@@ -717,6 +779,120 @@ export function generateCity(taste: TasteInput, seed = seedFor([...taste.artists
     }
   }
 
+  /* ---------------- streets named after songs ---------------- */
+  const streets: StreetPlan[] = [];
+  const songPools = new Map<GenreId, { title: string; artistId: string }[]>();
+  const catalogueHere = artists.filter((a) => !a.custom && a.songs.length);
+  const usedSongs = new Set<string>();
+  const songFor = (genre: GenreId): { title: string; artistId: string } | undefined => {
+    if (!songPools.has(genre)) {
+      const mine = catalogueHere.filter((a) => a.genres[0] === genre);
+      const near = catalogueHere.filter((a) => a.genres.includes(genre) && a.genres[0] !== genre);
+      const list = (as: Artist[]) => shuffle(rng, as.flatMap((a) => a.songs.map((x) => ({ title: x.title.replace(/[“”"]/g, '').replace(/\s*\(.*?\)/g, '').trim(), artistId: a.id }))));
+      songPools.set(genre, [...list(mine), ...list(near)]);
+    }
+    const pool = songPools.get(genre)!;
+    const fallback = () => shuffle(rng, catalogueHere).flatMap((a) => a.songs.map((x) => ({ title: x.title.replace(/[“”"]/g, '').replace(/\s*\(.*?\)/g, '').trim(), artistId: a.id })));
+    return [...pool, ...fallback()].find((x) => x.title.length <= 24 && !BAD_STREET.test(x.title) && !usedSongs.has(normalize(x.title)));
+  };
+  const lineGenre = (cells: Block[]): GenreId => {
+    const count = new Map<GenreId, number>();
+    for (const b of cells) count.set(b.dominant, (count.get(b.dominant) ?? 0) + 1);
+    return [...count.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? primary.genre;
+  };
+  for (let k = 0; k <= grid; k++) {
+    for (const axis of ['z', 'x'] as const) {
+      const cells: Block[] = [];
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (let j = 0; j < grid; j++) {
+        const pair = axis === 'z' ? [blockAt.get(`${k - 1},${j}`), blockAt.get(`${k},${j}`)] : [blockAt.get(`${j},${k - 1}`), blockAt.get(`${j},${k}`)];
+        const land = pair.filter((b): b is Block => !!b && b.use !== 'water');
+        if (!land.length) continue;
+        cells.push(...land);
+        lo = Math.min(lo, edge(j));
+        hi = Math.max(hi, edge(j + 1));
+      }
+      if (cells.length < 4) continue;
+      const genre = lineGenre(cells);
+      const song = songFor(genre);
+      if (!song) continue;
+      usedSongs.add(normalize(song.title));
+      const endsLikeStreet = /\b(street|road|lane|avenue|boulevard|way|row|alley|square|drive)$/i.test(song.title);
+      streets.push({
+        id: `street-${axis}${k}`,
+        name: endsLikeStreet ? song.title : `${song.title} ${STREET_SUFFIX[genre]}`,
+        song: song.title,
+        artistId: song.artistId,
+        genre,
+        axis: axis === 'z' ? 'z' : 'x',
+        c: edge(k),
+        from: lo,
+        to: hi,
+      });
+    }
+  }
+
+  /* ---------------- artist homes ---------------- */
+  const homes: HomePlan[] = [];
+  const homeBuildings = new Set<number>();
+  const homeArtists = [
+    ...artists.filter((a) => userIds.has(a.id) && !a.custom),
+    ...artists
+      .filter((a) => !userIds.has(a.id) && !a.custom)
+      .map((a) => ({ a, n: venues.filter((v) => v.artistIds.includes(a.id)).length + rng() }))
+      .sort((x, y) => y.n - x.n)
+      .map((x) => x.a),
+  ].slice(0, Math.min(18, Math.max(8, userIds.size + 6)));
+  for (const a of homeArtists) {
+    const d = districtFor(a.genres);
+    const b = remaining
+      .filter((x) => !homeBuildings.has(x.id) && x.height < 16 && x.archetype !== 'curvy' && x.archetype !== 'dome' && x.width > 3.2 && x.depth > 3.2)
+      .filter((x) => homes.every((h) => dist(h.position, x.position) > PITCH * 0.9))
+      .map((x) => ({ x, s: dist(x.position, d.center) * (blocks[x.blockId]?.dominant === d.genre ? 1 : 1.8) + rng() * PITCH * 2.5 }))
+      .sort((p, q) => p.s - q.s)[0]?.x;
+    if (!b) continue;
+    homeBuildings.add(b.id);
+    const g = a.genres[0] ?? d.genre;
+    homes.push({
+      id: `home-${a.id}`,
+      artistId: a.id,
+      position: b.position,
+      rotation: Math.floor(rng() * 4) * (Math.PI / 2),
+      width: b.width,
+      depth: b.depth,
+      style: HOME_STYLE[g] ?? 'house',
+      genre: g,
+    });
+  }
+
+  /* ---------------- album billboards ---------------- */
+  const billboards: BillboardPlan[] = [];
+  const boardArtists = [
+    ...catalogueHere.filter((a) => userIds.has(a.id) && a.album.title),
+    ...shuffle(rng, catalogueHere.filter((a) => !userIds.has(a.id) && a.album.title)),
+  ].slice(0, Math.min(18, 6 + Math.round(districts.length * 1.5)));
+  for (const a of boardArtists) {
+    const d = districtFor(a.genres);
+    const b = remaining
+      .filter((x) => !homeBuildings.has(x.id) && x.height >= 14 && ['apartment', 'brutalist', 'classic', 'tower', 'neon-tower', 'warehouse', 'brick'].includes(x.archetype) && x.width >= 3.5)
+      .filter((x) => billboards.every((o) => dist(o.position, x.position) > PITCH * 1.7))
+      .map((x) => ({ x, s: dist(x.position, d.center) + rng() * PITCH * 3 }))
+      .sort((p, q) => p.s - q.s)[0]?.x;
+    if (!b) continue;
+    billboards.push({
+      id: `billboard-${a.id}`,
+      artistId: a.id,
+      title: a.album.title,
+      year: a.album.year,
+      position: b.position,
+      baseHeight: b.height,
+      rotation: rng() < 0.5 ? 0 : Math.PI / 2,
+      genre: a.genres[0] ?? d.genre,
+    });
+  }
+  const finalBuildings = remaining.filter((b) => !homeBuildings.has(b.id)).map((b, i) => ({ ...b, id: i }));
+
   return {
     seed,
     size: grid * PITCH,
@@ -724,7 +900,7 @@ export function generateCity(taste: TasteInput, seed = seedFor([...taste.artists
     road: ROAD,
     grid,
     blocks,
-    buildings: remaining,
+    buildings: finalBuildings,
     venues,
     landmarks,
     districts,
@@ -737,6 +913,9 @@ export function generateCity(taste: TasteInput, seed = seedFor([...taste.artists
     connections: connections.slice(0, 80),
     labels,
     buskers,
+    streets,
+    homes,
+    billboards,
     dna,
     artists,
     userArtistIds: input.artists.map((a) => a.id),
