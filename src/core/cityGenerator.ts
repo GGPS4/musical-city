@@ -294,6 +294,7 @@ export function generateCity(taste: TasteInput, seed = seedFor([...taste.artists
       rotation,
       model: l.model,
       footprint: BLOCK,
+      soundtrack: l.soundtrack,
     });
   }
 
