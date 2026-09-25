@@ -9,12 +9,14 @@ import type { CityPlan, Vec2 } from '../types.js';
 import { TIMELINE } from './buildings.js';
 import { CityView, type PickHit } from './cityBuilder.js';
 import { LabelLayer, type LabelKind } from './labels.js';
+import { WalkMode, type Nearby } from './walk.js';
 
 export interface SceneEvents {
   onPick: (hit: PickHit | null) => void;
   onLabel: (kind: LabelKind, id: string) => void;
   onBuildProgress?: (t: number) => void;
   onBuildComplete?: () => void;
+  onNearby?: (n: Nearby) => void;
 }
 
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -53,6 +55,7 @@ export class CityScene {
   private frames = { count: 0, start: 0, checked: false };
   private buildDone = false;
   private moon!: THREE.DirectionalLight;
+  readonly walk: WalkMode;
   private width = 1;
   private height = 1;
 
@@ -97,6 +100,7 @@ export class CityScene {
     if (!this.mobile) this.setupComposer();
 
     this.labels = new LabelLayer(labelRoot, (k, id) => this.events.onLabel(k, id));
+    this.walk = new WalkMode(this.camera, this.renderer.domElement, (n) => this.events.onNearby?.(n));
 
     const el = this.renderer.domElement;
     el.addEventListener('pointerdown', (e) => (this.down = { x: e.clientX, y: e.clientY, t: performance.now() }));
@@ -210,7 +214,8 @@ export class CityScene {
 
   /* ---------------- city ---------------- */
 
-  setCity(plan: CityPlan, animate: boolean): void {
+  setCity(plan: CityPlan, animate: boolean, districtSubs: Record<string, string> = {}): void {
+    if (this.walk.active) this.exitWalk();
     this.city?.dispose();
     this.labels.clear();
     this.city = new CityView(plan, { animate, mobile: this.mobile });
@@ -223,7 +228,7 @@ export class CityScene {
     this.moon.shadow.camera.updateProjectionMatrix();
 
     for (const d of plan.districts) {
-      this.labels.add('district', d.genre, d.name, d.nickname, new THREE.Vector3(d.center.x, 16, d.center.z), [0, 9999]);
+      this.labels.add('district', d.genre, d.name, districtSubs[d.genre] ?? d.nickname, new THREE.Vector3(d.center.x, 16, d.center.z), [0, 9999]);
     }
     for (const m of plan.mixed) {
       this.labels.add('mixed', m.genres.join('|'), m.name, 'where the styles blend', new THREE.Vector3(m.center.x, 11, m.center.z), [plan.size * 0.35, plan.size * 1.3]);
@@ -233,6 +238,7 @@ export class CityScene {
       this.labels.add('landmark', l.id, l.name, l.type === 'historical' ? 'Historical landmark' : 'Musical interpretation', new THREE.Vector3(l.position.x, (model?.height ?? 6) + 6.5, l.position.z), [0, plan.size * (l.type === 'historical' ? 0.62 : 0.45)]);
     }
     for (const v of plan.venues) this.addVenueLabel(v.id);
+    this.walk.setPlan(plan);
 
     if (animate) {
       this.intro = { start: this.time, radius: plan.size, azimuth: Math.random() * Math.PI * 2 };
@@ -338,6 +344,96 @@ export class CityScene {
 
   onVenueAdded(id: string): void {
     this.addVenueLabel(id);
+    const v = this.city?.plan.venues.find((x) => x.id === id);
+    if (v) this.walk.removeAt(v.position);
+  }
+
+  setDistrictSub(genre: string, sub: string): void {
+    this.labels.setSub('district', genre, sub);
+  }
+
+  /* ---------------- poster ---------------- */
+
+  /**
+   * Renders the city from a fixed three-quarter angle into a square image for
+   * the poster, and returns a projector for placing labels on top of it.
+   */
+  capturePoster(size = 2048): { image: HTMLCanvasElement; project: (p: Vec2, y?: number) => [number, number] } | null {
+    const city = this.city;
+    if (!city) return null;
+    const cam = new THREE.PerspectiveCamera(32, 1, 1, 3000);
+    const s = city.plan.size;
+    cam.position.set(s * 0.78, s * 0.95, s * 0.78);
+    cam.lookAt(0, -s * 0.04, 0);
+    cam.updateMatrixWorld();
+
+    const prevRatio = this.renderer.getPixelRatio();
+    city.select(null);
+    city.beams([]);
+    this.renderer.setPixelRatio(1);
+    this.renderer.setSize(size, size, false);
+    this.composer?.setSize(size, size);
+    this.bloom?.setSize(size, size);
+    const pass = this.composer?.passes[0] as RenderPass | undefined;
+    if (pass) pass.camera = cam;
+    if (this.composer) this.composer.render();
+    else this.renderer.render(this.scene, cam);
+
+    const image = document.createElement('canvas');
+    image.width = size;
+    image.height = size;
+    image.getContext('2d')?.drawImage(this.renderer.domElement, 0, 0, size, size);
+
+    if (pass) pass.camera = this.camera;
+    this.renderer.setPixelRatio(prevRatio);
+    this.resize();
+    const v = new THREE.Vector3();
+    return {
+      image,
+      project: (p, y = 0) => {
+        v.set(p.x, y, p.z).project(cam);
+        return [(v.x * 0.5 + 0.5) * size, (-v.y * 0.5 + 0.5) * size];
+      },
+    };
+  }
+
+  /* ---------------- walking ---------------- */
+
+  enterWalk(at: Vec2, lookAt?: Vec2): void {
+    if (!this.city) return;
+    if (this.intro) this.skipIntro();
+    this.tween = null;
+    this.controls.enabled = false;
+    this.controls.autoRotate = false;
+    this.setViewShift(0);
+    // A soft light that follows you, and a brighter exposure, so facades read at street level.
+    if (!this.walkLight.parent) this.camera.add(this.walkLight);
+    if (!this.camera.parent) this.scene.add(this.camera);
+    this.walkLight.visible = true;
+    this.renderer.toneMappingExposure = 1.4;
+    this.walk.enter(at, lookAt);
+  }
+
+  private walkLight = new THREE.PointLight(0xffe2b8, 18, 30, 1.4);
+
+  exitWalk(): void {
+    if (!this.walk.active) return;
+    const look = this.walk.lookPoint();
+    this.walk.exit();
+    this.walkLight.visible = false;
+    this.renderer.toneMappingExposure = 1.05;
+    this.controls.enabled = true;
+    this.controls.target.copy(look);
+    const back = this.camera.position.clone().sub(look).setY(0).normalize();
+    this.camera.position.copy(look).add(back.multiplyScalar(40)).setY(34);
+    this.camera.up.set(0, 1, 0);
+    this.camera.lookAt(look);
+    this.resize();
+    this.controls.update();
+  }
+
+  get walking(): boolean {
+    return this.walk.active;
   }
 
   /* ---------------- interaction ---------------- */
@@ -383,7 +479,9 @@ export class CityScene {
     const city = this.city;
     city?.update(dt);
 
-    if (this.intro && city) {
+    if (this.walk.active) {
+      this.walk.update(dt, this.time);
+    } else if (this.intro && city) {
       const t = this.time - this.intro.start;
       const k = Math.min(1, t / TIMELINE.done);
       const e = easeInOut(k);
@@ -414,7 +512,7 @@ export class CityScene {
 
     if (this.composer) this.composer.render();
     else this.renderer.render(this.scene, this.camera);
-    this.labels.update(this.camera, this.controls.target, this.width, this.height);
+    this.labels.update(this.camera, this.controls.target, this.width, this.height, this.walk.active);
     this.adapt();
   }
 

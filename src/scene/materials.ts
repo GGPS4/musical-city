@@ -101,7 +101,7 @@ export function facadeMaterial(key: string, o: FacadeOptions): THREE.MeshStandar
         uniform float uBay, uFloor, uLit, uCoolMix, uIntensity, uLights, uStore, uTime;
         uniform vec2 uWin;
         uniform vec3 uWarm, uCool, uGlass;
-        float fcHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float fcHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
         vec3 fcHue(float h) { return clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0); }`,
       )
       .replace(
@@ -122,7 +122,9 @@ export function facadeMaterial(key: string, o: FacadeOptions): THREE.MeshStandar
           vec2 f = fract(cell);
           float win = step(uWin.x, f.x) * step(f.x, 1.0 - uWin.x) * step(uWin.y, f.y) * step(f.y, 1.0 - uWin.y);
           win *= wall * step(0.0, cell.y) * step(0.6, h);
-          float seed = fcHash(id + vFcCenter.xz * 0.731 + vec2(n.x * 3.1, n.z * 5.7));
+          // Quantise the face direction so the hash is identical across a window (no per-pixel speckle).
+          vec2 face = floor(n.xz * 1.999 + 0.5);
+          float seed = fcHash(id + floor(vFcCenter.xz * 7.31) * 0.113 + face * vec2(3.1, 5.7));
           float lit = step(1.0 - uLit, seed);
           vec3 wc = mix(uWarm, uCool, step(0.5, fract(seed * 7.13)) * uCoolMix);
           #ifdef FACADE_PSYCH

@@ -697,6 +697,119 @@ export function buildLandmark(l: LandmarkPlan): Model {
       height = 7;
       break;
     }
+    case 'anvil': {
+      box(MATS.stone(), 0, 0, 0, 7, 0.6, 4, group);
+      const iron = std('iron', { color: 0x1c1c20, metalness: 0.8, roughness: 0.45 });
+      box(iron, 0, 0.6, 0, 3.4, 1.2, 2.2, group);
+      box(iron, 0, 1.8, 0, 1.6, 2.2, 1.4, group);
+      const top = new THREE.Shape();
+      top.moveTo(-3.2, 0);
+      top.lineTo(2.2, 0);
+      top.quadraticCurveTo(4.6, 0.2, 5.4, 1.4);
+      top.lineTo(2.2, 1.6);
+      top.lineTo(-3.2, 1.6);
+      top.closePath();
+      const topGeo = new THREE.ExtrudeGeometry(top, { depth: 2.2, bevelEnabled: false });
+      topGeo.translate(-0.8, 4, -1.1);
+      const anvilTop = new THREE.Mesh(topGeo, iron);
+      anvilTop.castShadow = true;
+      group.add(anvilTop);
+      const heat = box(glow('#ff3b1f', 2.2), -0.2, 5.6, 0, 4, 0.06, 1.6, group, false);
+      ticks.push((t) => (heat.scale.y = 0.06 * (0.6 + 0.4 * Math.sin(t * 3))));
+      height = 7;
+      break;
+    }
+    case 'boombox': {
+      box(MATS.stone(), 0, 0, 0, 10, 0.5, 3.5, group);
+      box(MATS.darkMetal(), 0, 0.5, 0, 9.4, 5, 2.4, group);
+      mesh(G().cylinderLow, MATS.metal(), 0, 5.5, 0, 0.25, 1.6, 0.25, group).rotation.z = Math.PI / 2;
+      box(MATS.metal(), -3.5, 5.5, 0, 0.3, 1.6, 0.3, group);
+      box(MATS.metal(), 3.5, 5.5, 0, 0.3, 1.6, 0.3, group);
+      box(MATS.metal(), 0, 6.9, 0, 7.3, 0.3, 0.3, group);
+      box(glow('#2ec4b6', 1.8), 0, 4.4, 1.22, 3.2, 0.7, 0.04, group, false);
+      for (const sx of [-3, 3]) {
+        const cone = new THREE.Mesh(new THREE.CircleGeometry(1.6, 32), MATS.black());
+        cone.position.set(sx, 2.6, 1.22);
+        group.add(cone);
+        const ring = new THREE.Mesh(new THREE.RingGeometry(1.55, 1.8, 32), glow('#ffd23f', 1.8));
+        ring.position.set(sx, 2.6, 1.23);
+        group.add(ring);
+        const dust = new THREE.Mesh(new THREE.CircleGeometry(0.6, 24), MATS.metal());
+        dust.position.set(sx, 2.6, 1.25);
+        group.add(dust);
+        ticks.push((t) => {
+          const k = 1 + Math.max(0, Math.sin(t * 8.4)) * 0.12;
+          cone.scale.setScalar(k);
+          dust.scale.setScalar(k);
+        });
+      }
+      height = 8;
+      break;
+    }
+    case 'saxophone': {
+      mesh(G().cylinder, MATS.stone(), 0, 0, 0, 4, 0.6, 4, group);
+      const brass = std('brass', { color: 0xc9a14a, metalness: 1, roughness: 0.28 });
+      const curve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(-0.6, 16, 0),
+        new THREE.Vector3(0, 14.5, 0),
+        new THREE.Vector3(0, 9, 0),
+        new THREE.Vector3(0, 4, 0),
+        new THREE.Vector3(0.6, 2.2, 0),
+        new THREE.Vector3(2, 1.8, 0),
+        new THREE.Vector3(2.8, 3.2, 0),
+        new THREE.Vector3(3, 5.4, 0),
+      ]);
+      const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 64, 0.62, 16), brass);
+      tube.castShadow = true;
+      group.add(tube);
+      const bell = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 0.62, 2, 24, 1, true), brass);
+      (bell.material as THREE.Material).side = THREE.DoubleSide;
+      bell.position.set(3, 6.3, 0);
+      group.add(bell);
+      for (let i = 0; i < 7; i++) mesh(G().cylinderLow, brass, 0.62, 5 + i * 1.3, 0, 0.5, 0.2, 0.5, group).rotation.z = Math.PI / 2;
+      mesh(G().sphere, glow('#4cc9f0', 1.6), 3, 6.9, 0, 1.6, 0.25, 1.6, group, false);
+      height = 17;
+      break;
+    }
+    case 'golden-record': {
+      box(MATS.stone(), 0, 0, 0, 6, 0.6, 3, group);
+      box(MATS.darkMetal(), 0, 0.6, 0, 0.6, 5, 0.6, group);
+      const disc = new THREE.Group();
+      const gold = std('gold', { color: 0xe6b84c, metalness: 1, roughness: 0.22 });
+      const rec = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 4.2, 0.3, 64), gold);
+      rec.rotation.x = Math.PI / 2;
+      rec.castShadow = true;
+      disc.add(rec);
+      const label = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, 0.34, 32), glow('#ff5d8f', 1.4));
+      label.rotation.x = Math.PI / 2;
+      disc.add(label);
+      disc.position.y = 9.5;
+      group.add(disc);
+      ticks.push((t) => (disc.rotation.z = t * 0.6));
+      height = 14;
+      break;
+    }
+    case 'sound-system': {
+      box(MATS.stone(), 0, 0, 0, 10, 0.5, 4, group);
+      const colors = ['#b5523b', '#e0a458', '#4f7a3a', '#1d1d1f'];
+      const cones: THREE.Mesh[] = [];
+      for (let row = 0; row < 4; row++) {
+        for (let col = 0; col < 3 - (row === 3 ? 1 : 0); col++) {
+          const w = 3;
+          const x = (col - (row === 3 ? 0.5 : 1)) * (w + 0.1);
+          const y = 0.5 + row * 2.3;
+          box(colored(colors[(row + col) % colors.length], 0.8), x, y, 0, w, 2.2, 2.4, group);
+          const cone = new THREE.Mesh(new THREE.CircleGeometry(0.85, 24), MATS.black());
+          cone.position.set(x, y + 1.1, 1.22);
+          group.add(cone);
+          cones.push(cone);
+        }
+      }
+      ticks.push((t) => cones.forEach((c, i) => c.scale.setScalar(1 + Math.max(0, Math.sin(t * 7.5 + (i % 2) * 0.5)) * 0.15)));
+      box(glow('#f9d423', 1.8), 0, 9.7, 1.22, 6, 0.3, 0.04, group, false);
+      height = 10;
+      break;
+    }
     case 'gallery-cube': {
       box(MATS.stone(), 0, 0, 0, 4, 0.4, 4, group);
       mesh(G().cylinderLow, MATS.darkMetal(), 0, 0.4, 0, 0.3, 1.2, 0.3, group);

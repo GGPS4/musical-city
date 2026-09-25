@@ -107,6 +107,7 @@ export class CityView {
     if (this.waterMat) this.waterMat.opacity = 0.35 + 0.6 * clamp01((t - 0.3) / 0.8);
     for (const tick of this.ticks) tick(this.clock, dt);
     this.updateCars(dt, lights);
+    this.updateGig(dt);
     for (const p of this.pulses) {
       const u = (this.clock * 0.35 + p.offset) % 1;
       p.mesh.position.copy(p.curve.getPoint(u));
@@ -580,6 +581,113 @@ export class CityView {
     }
   }
 
+  /* ------------------------------------------------------------------ */
+  /* Gig night                                                          */
+  /* ------------------------------------------------------------------ */
+
+  private gig: {
+    group: THREE.Group;
+    crowd: THREE.InstancedMesh;
+    base: { x: number; y: number; z: number; s: number; ph: number }[];
+    light: THREE.PointLight;
+    beams: THREE.Object3D[];
+    fireworks: Fireworks | null;
+    start: number;
+    color: THREE.Color;
+  } | null = null;
+
+  /** Crowds, searchlights and (for landmarks) fireworks around a place. */
+  startGig(pos: Vec2, color: string, height: number, fireworks: boolean): void {
+    this.stopGig();
+    const group = new THREE.Group();
+    const c = new THREE.Color(color);
+    const spots: { x: number; z: number }[] = [];
+    let seed = Math.abs(Math.round(pos.x * 31 + pos.z * 17)) + 1;
+    const r = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
+    for (const road of this.plan.roads) {
+      const mx = (road.a.x + road.b.x) / 2;
+      const mz = (road.a.z + road.b.z) / 2;
+      if (Math.hypot(mx - pos.x, mz - pos.z) > 17) continue;
+      for (let i = 0; i < 26; i++) {
+        const t = r();
+        const along = { x: road.a.x + (road.b.x - road.a.x) * t, z: road.a.z + (road.b.z - road.a.z) * t };
+        const horizontal = Math.abs(road.b.x - road.a.x) > 0.1;
+        const j = (r() - 0.5) * (this.plan.road - 0.6);
+        spots.push(horizontal ? { x: along.x, z: along.z + j } : { x: along.x + j, z: along.z });
+      }
+    }
+    const count = Math.min(420, spots.length);
+    const crowd = new THREE.InstancedMesh(geo().sphere, MATS.instanced(), Math.max(1, count));
+    const palette = ['#e6e6e6', '#ff5a5f', '#3fa7d6', '#fac05e', '#59cd90', '#8e7dbe', '#2b2b2b', '#f28482'];
+    const base: { x: number; y: number; z: number; s: number; ph: number }[] = [];
+    for (let i = 0; i < count; i++) {
+      base.push({ x: spots[i].x, y: 0.3, z: spots[i].z, s: 0.8 + r() * 0.4, ph: r() * 6.28 });
+      crowd.setColorAt(i, new THREE.Color(palette[i % palette.length]));
+    }
+    crowd.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    crowd.frustumCulled = false;
+    group.add(crowd);
+
+    const light = new THREE.PointLight(c, 0, 40, 1.6);
+    light.position.set(pos.x, height + 4, pos.z);
+    group.add(light);
+
+    const beams: THREE.Object3D[] = [];
+    for (let i = 0; i < 3; i++) {
+      const pivot = new THREE.Group();
+      pivot.position.set(pos.x, 0.3, pos.z);
+      const beam = new THREE.Mesh(
+        new THREE.CylinderGeometry(2.2, 0.25, 60, 16, 1, true).translate(0, 30, 0),
+        new THREE.MeshBasicMaterial({ map: beamTexture(), color: i === 1 ? '#ffffff' : c, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }),
+      );
+      beam.rotation.z = 0.35;
+      pivot.add(beam);
+      pivot.rotation.y = (i / 3) * Math.PI * 2;
+      group.add(pivot);
+      beams.push(pivot);
+    }
+    this.group.add(group);
+    this.gig = { group, crowd, base, light, beams, fireworks: fireworks ? new Fireworks(group, new THREE.Vector3(pos.x, height + 14, pos.z), c) : null, start: this.clock, color: c };
+  }
+
+  stopGig(): void {
+    if (!this.gig) return;
+    this.gig.group.removeFromParent();
+    this.gig.crowd.dispose();
+    this.gig.fireworks?.dispose();
+    this.gig = null;
+  }
+
+  get gigActive(): boolean {
+    return !!this.gig;
+  }
+
+  private gigM = new THREE.Matrix4();
+  private gigQ = new THREE.Quaternion();
+  private gigP = new THREE.Vector3();
+  private gigS = new THREE.Vector3();
+
+  private updateGig(dt: number) {
+    const g = this.gig;
+    if (!g) return;
+    const t = this.clock - g.start;
+    // Roughly 124 bpm, with a stronger hit on the downbeat.
+    const beatPhase = (t * 124) / 60;
+    const pulse = Math.pow(1 - (beatPhase % 1), 3) * (Math.floor(beatPhase) % 4 === 0 ? 1 : 0.6);
+    g.base.forEach((b, i) => {
+      const hop = Math.max(0, Math.sin(beatPhase * Math.PI * 2 + b.ph * 0.3)) * 0.28;
+      this.gigM.compose(this.gigP.set(b.x, b.y + hop, b.z), this.gigQ, this.gigS.set(0.34 * b.s, 0.62 * b.s, 0.34 * b.s));
+      g.crowd.setMatrixAt(i, this.gigM);
+    });
+    g.crowd.instanceMatrix.needsUpdate = true;
+    g.light.intensity = 30 + pulse * 120;
+    g.beams.forEach((b, i) => {
+      b.rotation.y += dt * (0.5 + i * 0.25);
+      b.children[0].rotation.z = 0.3 + Math.sin(t * 0.7 + i) * 0.2;
+    });
+    g.fireworks?.update(dt, t);
+  }
+
   /** Resolves a raycast hit object to a venue, landmark or building. */
   resolveHit(hit: THREE.Intersection): PickHit | null {
     let o: THREE.Object3D | null = hit.object;
@@ -615,4 +723,84 @@ interface CarData {
 
 function isShared(g: THREE.BufferGeometry): boolean {
   return Object.values(geo()).includes(g as never);
+}
+
+/** Simple particle fireworks: bursts of coloured sparks with gravity. */
+class Fireworks {
+  private points: THREE.Points;
+  private pos: Float32Array;
+  private vel: Float32Array;
+  private col: Float32Array;
+  private life: Float32Array;
+  private next = 0.2;
+  private cursor = 0;
+  private readonly n = 900;
+  private palette: THREE.Color[];
+
+  constructor(parent: THREE.Object3D, private origin: THREE.Vector3, accent: THREE.Color) {
+    this.pos = new Float32Array(this.n * 3);
+    this.vel = new Float32Array(this.n * 3);
+    this.col = new Float32Array(this.n * 3);
+    this.life = new Float32Array(this.n);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(this.col, 3));
+    this.points = new THREE.Points(
+      g,
+      new THREE.PointsMaterial({ size: 0.7, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }),
+    );
+    this.points.frustumCulled = false;
+    parent.add(this.points);
+    this.palette = [accent.clone().multiplyScalar(2.5), new THREE.Color(2.5, 2.2, 1.6), new THREE.Color(1, 2.2, 2.6), new THREE.Color(2.6, 1, 1.8)];
+  }
+
+  private burst() {
+    const c = this.palette[Math.floor(Math.random() * this.palette.length)];
+    const cx = this.origin.x + (Math.random() - 0.5) * 14;
+    const cy = this.origin.y + Math.random() * 8;
+    const cz = this.origin.z + (Math.random() - 0.5) * 14;
+    const speed = 6 + Math.random() * 5;
+    for (let i = 0; i < 110; i++) {
+      const k = this.cursor;
+      this.cursor = (this.cursor + 1) % this.n;
+      const u = Math.random() * 2 - 1;
+      const a = Math.random() * Math.PI * 2;
+      const s = Math.sqrt(1 - u * u);
+      this.pos.set([cx, cy, cz], k * 3);
+      this.vel.set([Math.cos(a) * s * speed, u * speed + 1.5, Math.sin(a) * s * speed], k * 3);
+      this.life[k] = 1.4 + Math.random() * 0.6;
+      this.col.set([c.r, c.g, c.b], k * 3);
+    }
+  }
+
+  update(dt: number, t: number) {
+    if (t > this.next) {
+      this.burst();
+      this.next = t + 0.45 + Math.random() * 0.7;
+    }
+    for (let i = 0; i < this.n; i++) {
+      if (this.life[i] <= 0) {
+        this.pos[i * 3 + 1] = -999;
+        continue;
+      }
+      this.life[i] -= dt;
+      this.vel[i * 3 + 1] -= 6 * dt;
+      this.vel[i * 3] *= 0.985;
+      this.vel[i * 3 + 2] *= 0.985;
+      this.pos[i * 3] += this.vel[i * 3] * dt;
+      this.pos[i * 3 + 1] += this.vel[i * 3 + 1] * dt;
+      this.pos[i * 3 + 2] += this.vel[i * 3 + 2] * dt;
+      const fade = Math.max(0, Math.min(1, this.life[i] / 0.8));
+      this.col[i * 3] *= 0.992 + 0.008 * fade;
+      this.col[i * 3 + 1] *= 0.99 + 0.01 * fade;
+      this.col[i * 3 + 2] *= 0.99 + 0.01 * fade;
+    }
+    this.points.geometry.attributes.position.needsUpdate = true;
+    this.points.geometry.attributes.color.needsUpdate = true;
+  }
+
+  dispose() {
+    this.points.geometry.dispose();
+    (this.points.material as THREE.Material).dispose();
+  }
 }

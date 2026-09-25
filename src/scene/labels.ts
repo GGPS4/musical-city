@@ -50,10 +50,19 @@ export class LabelLayer {
     this.root.classList.toggle('is-dimmed', d);
   }
 
-  update(camera: THREE.PerspectiveCamera, target: THREE.Vector3, width: number, height: number): void {
+  setSub(kind: LabelKind, id: string, sub: string): void {
+    const l = this.labels.find((x) => x.kind === kind && x.id === id);
+    const el = l?.el.querySelector('.map-label__sub');
+    if (el) el.textContent = sub;
+  }
+
+  update(camera: THREE.PerspectiveCamera, target: THREE.Vector3, width: number, height: number, walking = false): void {
     const camDist = camera.position.distanceTo(target);
+    const walkRange: Record<LabelKind, number> = { district: 150, mixed: 0, landmark: 70, venue: 45 };
     for (const l of this.labels) {
-      const inRange = camDist >= l.minDistance && camDist <= l.maxDistance && !this.dimmed;
+      const inRange = walking
+        ? camera.position.distanceTo(l.pos) < walkRange[l.kind] && !this.dimmed
+        : camDist >= l.minDistance && camDist <= l.maxDistance && !this.dimmed;
       this.v.copy(l.pos).project(camera);
       const onScreen = this.v.z < 1 && Math.abs(this.v.x) < 1.1 && Math.abs(this.v.y) < 1.1;
       const show = inRange && onScreen;
