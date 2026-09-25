@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { GENRES } from '../data/genres.js';
-import type { BuskerPlan, LabelTowerPlan, LandmarkPlan, VenuePlan } from '../types.js';
+import type { BillboardPlan, BuskerPlan, HomePlan, LabelTowerPlan, LandmarkPlan, VenuePlan } from '../types.js';
 import { geo } from './geometries.js';
 import { FACADES, MATS, glow, std } from './materials.js';
-import { beamTexture, glowTexture, graffitiTexture, noteTexture, pulseTexture, signTexture, vinylTexture } from './textures.js';
+import { beamTexture, glowTexture, graffitiTexture, noteTexture, pulseTexture, signTexture, sleeveTexture, vinylTexture } from './textures.js';
 
 /**
  * Hand-built models for venues, historical landmarks and genre monuments.
@@ -242,6 +242,11 @@ export function buildVenue(v: VenuePlan): Model {
     }
   }
 
+  // A small brass plaque by the door with facts about the artists who play here.
+  const brass = colored('#b8923a', 0.35, 0.8);
+  box(MATS.darkMetal(), f * 0.36, 0, f * 0.5 + 0.35, 0.08, 1.0, 0.08, group);
+  const plate = box(brass, f * 0.36, 0.95, f * 0.5 + 0.35, 0.55, 0.4, 0.05, group, false);
+  plate.rotation.x = -0.35;
   pickBox(group, f, height + 1, f);
   marker(group, height + 3.2, neon, ticks, false);
   const outer = wrap(group, VENUE_SCALE, v.position.x, 0.18, v.position.z, v.rotation, { kind: 'venue', id: v.id });
@@ -1002,4 +1007,93 @@ export function buildBusker(b: BuskerPlan): Model {
   pickBox(group, 1.8, 2, 1.8);
   const outer = wrap(group, BUSKER_SCALE, b.position.x, 0.2, b.position.z, b.rotation, { kind: 'busker', id: b.id });
   return { group: outer, height: 2 * BUSKER_SCALE, ticks };
+}
+
+/* ------------------------------------------------------------------ */
+/* Artist homes                                                        */
+/* ------------------------------------------------------------------ */
+
+export function buildHome(h: HomePlan, artistName: string): Model {
+  const group = new THREE.Group();
+  const ticks: Tick[] = [];
+  const g = GENRES[h.genre];
+  const w = Math.min(6.4, Math.max(3.4, h.width));
+  const d = Math.min(6.4, Math.max(3.4, h.depth));
+  const accent = g.style.neon[0];
+  let height = 4;
+  // Little front garden with a low fence.
+  box(MATS.grass(), 0, 0, 0, w + 0.8, 0.08, d + 0.8, group);
+  for (const sx of [-1, 1]) box(MATS.white(), (sx * (w + 0.7)) / 2, 0, 0, 0.08, 0.45, d + 0.7, group, false);
+  box(MATS.white(), 0, 0, -(d + 0.7) / 2, w + 0.7, 0.45, 0.08, group, false);
+  if (h.style === 'house') {
+    height = 4.6;
+    tint(box(FACADES.brick(), 0, 0, 0, w * 0.82, height, d * 0.7, group), g.style.palette[0]);
+    mesh(G().pitched, colored('#3b2d27'), 0, height, 0, w * 0.86, 1.8, d * 0.74, group);
+    box(colored('#3b2d27'), w * 0.25, height + 0.6, 0, 0.45, 1.6, 0.45, group);
+  } else if (h.style === 'studio') {
+    height = 5;
+    tint(box(FACADES.glass(), 0, 0, 0, w * 0.85, height, d * 0.75, group), '#8fa2c9');
+    box(glow(accent, 1.8), 0, height - 0.15, 0, w * 0.87, 0.12, d * 0.77, group, false);
+    const dish = mesh(G().dome, MATS.metal(), -w * 0.2, height, d * 0.1, 1.1, 0.5, 1.1, group);
+    dish.rotation.z = 0.6;
+    sign('STUDIO', accent, 0.45, group, 0, height - 0.8, (d * 0.75) / 2 + 0.05, 'neon', w * 0.6);
+  } else {
+    height = 5.6;
+    tint(box(FACADES.industrial(), 0, 0, 0, w * 0.86, height, d * 0.76, group), g.style.palette[1] ?? g.style.palette[0]);
+    mesh(G().sawtooth, MATS.roof(), 0, height, 0, w * 0.86, 1, d * 0.76, group);
+    box(glow('#ffcf8a', 1.2), 0, 0.1, (d * 0.76) / 2 + 0.02, w * 0.4, 2.2, 0.03, group, false);
+  }
+  // Front door glow and a name plate.
+  box(glow('#ffd9a0', 1.4), -w * 0.18, 0.1, (d * 0.76) / 2 + 0.03, 0.8, 1.7, 0.03, group, false);
+  sign(artistName, '#ffd27a', 0.42, group, -w * 0.18, 2.2, (d * 0.76) / 2 + 0.12, 'marquee', w * 0.7);
+  pickBox(group, w, height + 1.5, d);
+  marker(group, height + 3, '#8ff0c8', ticks, false);
+  const outer = wrap(group, 1, h.position.x, 0.18, h.position.z, h.rotation, { kind: 'home', id: h.id });
+  return { group: outer, height: height + 2, ticks };
+}
+
+/* ------------------------------------------------------------------ */
+/* Album billboards                                                    */
+/* ------------------------------------------------------------------ */
+
+export interface BillboardModel extends Model {
+  setArt(texture: THREE.Texture): void;
+}
+
+export function buildBillboard(b: BillboardPlan, artistName: string): BillboardModel {
+  const group = new THREE.Group();
+  const ticks: Tick[] = [];
+  const g = GENRES[b.genre];
+  const B = 7.5;
+  const legs = 2.4;
+  for (const sx of [-1, 1]) box(MATS.darkMetal(), sx * B * 0.3, 0, 0, 0.22, legs + 0.5, 0.22, group);
+  box(MATS.darkMetal(), 0, legs, -0.1, B + 0.5, B + 0.5, 0.25, group);
+  const seed = Math.abs(Math.round(b.position.x * 13 + b.position.z * 7));
+  const tex = sleeveTexture(artistName, b.title, seed, [g.style.neon[0], g.style.neon[1] ?? '#ffd27a', g.style.palette[0]]);
+  const mat = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false });
+  mat.color.setScalar(1.05);
+  const faces: THREE.Mesh[] = [];
+  for (const side of [1, -1]) {
+    const face = new THREE.Mesh(G().plane, mat);
+    face.scale.set(B, B, 1);
+    face.position.set(0, legs + 0.25 + B / 2, side * 0.05);
+    if (side < 0) face.rotation.y = Math.PI;
+    group.add(face);
+    faces.push(face);
+  }
+  // Lamp bar above the board.
+  box(glow('#fff1cc', 1.6), 0, legs + B + 0.55, 0.35, B * 0.9, 0.12, 0.12, group, false);
+  box(glow('#fff1cc', 1.6), 0, legs + B + 0.55, -0.35, B * 0.9, 0.12, 0.12, group, false);
+  sign(`${artistName} · ${b.title}${b.year ? ` (${b.year})` : ''}`, '#ffffff', 0.55, group, 0, legs - 0.05, 0.2, 'marquee', B);
+  pickBox(group, B, B + legs, 1.2);
+  const outer = wrap(group, 1, b.position.x, b.baseHeight + 0.2, b.position.z, b.rotation, { kind: 'billboard', id: b.id });
+  return {
+    group: outer,
+    height: b.baseHeight + legs + B,
+    ticks,
+    setArt(texture: THREE.Texture) {
+      mat.map = texture;
+      mat.needsUpdate = true;
+    },
+  };
 }

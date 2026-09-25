@@ -103,6 +103,25 @@ export class InstanceBatch {
     return done;
   }
 
+  /** Finished pose, stretched vertically per owner (used by the visualiser). */
+  applyScale(factor: (tag: number) => number): void {
+    const mesh = this.mesh;
+    if (!mesh) return;
+    const d = this.data;
+    for (let i = 0; i < this.count; i++) {
+      const o = i * 10;
+      const hide = this.hidden.has(i);
+      const f = factor(this.tags[i]);
+      this.p.set(d[o], d[o + 1] * f, d[o + 2]);
+      this.q.setFromAxisAngle(this.up, d[o + 3]);
+      this.s.set(hide ? 1e-4 : d[o + 4], hide ? 1e-4 : d[o + 5] * f, hide ? 1e-4 : d[o + 6]);
+      this.m.compose(this.p, this.q, this.s);
+      mesh.setMatrixAt(i, this.m);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.frustumCulled = false;
+  }
+
   hideTag(tag: number): void {
     this.tags.forEach((t, i) => {
       if (t === tag) this.hidden.add(i);

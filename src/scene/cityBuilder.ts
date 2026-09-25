@@ -1,18 +1,19 @@
 import * as THREE from 'three';
 import { GENRES } from '../data/genres.js';
-import type { BuildingPlan, CityPlan, Connection, GenreId, Vec2, VenuePlan } from '../types.js';
+import type { BuildingPlan, BuskerPlan, CityPlan, Connection, GenreId, StreetPlan, Vec2, VenuePlan } from '../types.js';
 import { addBuildings, TIMELINE } from './buildings.js';
 import { geo } from './geometries.js';
 import { Instancer } from './instancer.js';
 import { MATS, cityUniforms, glow, std } from './materials.js';
-import { buildBusker, buildLabelTower, buildLandmark, buildVenue, type Model, type Tick } from './models.js';
+import { buildBillboard, buildBusker, buildHome, buildLabelTower, buildLandmark, buildVenue, type BillboardModel, type Model, type Tick } from './models.js';
+import { ARTIST_BY_ID } from '../data/artists.js';
 import { beamTexture, glowTexture } from './textures.js';
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 const easeOutBack = (t: number) => 1 + 2.4 * Math.pow(t - 1, 3) + 1.4 * Math.pow(t - 1, 2);
 
 export interface PickHit {
-  kind: 'venue' | 'landmark' | 'building' | 'label' | 'busker';
+  kind: 'venue' | 'landmark' | 'building' | 'label' | 'busker' | 'home' | 'billboard';
   id: string | number;
 }
 
@@ -29,6 +30,8 @@ export class CityView {
   readonly landmarks = new Map<string, Model>();
   readonly towers = new Map<string, Model>();
   readonly buskers = new Map<string, Model>();
+  readonly homes = new Map<string, Model>();
+  readonly billboards = new Map<string, BillboardModel>();
   readonly pickables: THREE.Object3D[] = [];
   private instancer = new Instancer();
   private ticks: Tick[] = [];
@@ -87,6 +90,22 @@ export class CityView {
       this.ticks.push(...m.ticks);
       this.animate(m.group, opts.animate ? TIMELINE.landmarks + 0.5 + i * 0.03 : -1, 0.5);
     });
+    const nameOf = (id: string) => ARTIST_BY_ID[id]?.name ?? plan.artists.find((a) => a.id === id)?.name ?? '';
+    plan.homes.forEach((h, i) => {
+      const m = buildHome(h, nameOf(h.artistId));
+      this.homes.set(h.id, m);
+      this.group.add(m.group);
+      this.pickables.push(m.group);
+      this.ticks.push(...m.ticks);
+      this.animate(m.group, opts.animate ? TIMELINE.venues + 0.3 + i * 0.05 : -1, 0.6);
+    });
+    plan.billboards.forEach((b, i) => {
+      const m = buildBillboard(b, nameOf(b.artistId));
+      this.billboards.set(b.id, m);
+      this.group.add(m.group);
+      this.pickables.push(m.group);
+      this.animate(m.group, opts.animate ? TIMELINE.lights + i * 0.04 : -1, 0.6);
+    });
     this.buildConnections();
     this.buildCars(opts.mobile ? 30 : 110);
     this.group.add(this.selection, this.focusBeams);
@@ -126,6 +145,7 @@ export class CityView {
     for (const tick of this.ticks) tick(this.clock, dt);
     this.updateCars(dt, lights);
     this.updateGig(dt);
+    this.updatePerformance(dt);
     for (const p of this.pulses) {
       const u = (this.clock * 0.35 + p.offset) % 1;
       p.mesh.position.copy(p.curve.getPoint(u));
@@ -599,6 +619,122 @@ export class CityView {
     }
   }
 
+  /* ------------------------------------------------------------------ */
+  /* Streets, visualiser, your own street performance                   */
+  /* ------------------------------------------------------------------ */
+
+  /** Lights up the length of a street. */
+  highlightStreet(st: StreetPlan, color: string): void {
+    const len = st.to - st.from;
+    const mid = (st.from + st.to) / 2;
+    const strip = new THREE.Mesh(
+      geo().groundPlane,
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(1.4), transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }),
+    );
+    strip.scale.set(st.axis === 'x' ? len : this.plan.road * 0.9, 1, st.axis === 'x' ? this.plan.road * 0.9 : len);
+    strip.position.set(st.axis === 'x' ? mid : st.c, 0.35, st.axis === 'x' ? st.c : mid);
+    this.focusBeams.add(strip);
+  }
+
+  private vizBands: Map<number, number> | null = null;
+
+  /**
+   * Stretches buildings with the music: the city is split into columns
+   * across x like a giant spectrum analyser. `levels` null restores them.
+   */
+  visualise(levels: number[] | null): void {
+    if (!levels) {
+      if (this.vizBands) for (const b of this.instancer.all()) b.apply(Infinity);
+      this.vizBands = null;
+      cityUniforms.uBeat.value = 0;
+      return;
+    }
+    if (!this.vizBands) {
+      const half = this.plan.size / 2;
+      this.vizBands = new Map(this.plan.buildings.map((b) => [b.id, Math.max(0, Math.min(levels.length - 1, Math.floor(((b.position.x + half) / this.plan.size) * levels.length)))]));
+    }
+    const bands = this.vizBands;
+    for (const b of this.instancer.all()) b.applyScale((tag) => (tag < 0 ? 1 : 1 + (levels[bands.get(tag) ?? 0] ?? 0) * 1.3));
+    cityUniforms.uBeat.value = (levels[0] + levels[1]) * 0.6;
+  }
+
+  private perf: {
+    group: THREE.Group;
+    crowd: THREE.InstancedMesh;
+    spots: { x: number; z: number; ph: number }[];
+    shown: number;
+    face: Vec2;
+    t: number;
+  } | null = null;
+
+  /** Your own busking spot: you, an instrument and a crowd that builds up. */
+  startPerformance(b: BuskerPlan): void {
+    this.stopPerformance();
+    const group = new THREE.Group();
+    const model = buildBusker(b);
+    model.group.userData = {};
+    group.add(model.group);
+    this.ticks.push(...model.ticks);
+    const max = 90;
+    const crowd = new THREE.InstancedMesh(geo().sphere, MATS.instanced(), max);
+    crowd.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    crowd.frustumCulled = false;
+    crowd.count = 0;
+    const palette = ['#e6e6e6', '#ff5a5f', '#3fa7d6', '#fac05e', '#59cd90', '#8e7dbe', '#2b2b2b', '#f28482'];
+    // Facing direction of the performer (busker models face +z before rotation).
+    const fx = Math.sin(b.rotation);
+    const fz = Math.cos(b.rotation);
+    const spots: { x: number; z: number; ph: number }[] = [];
+    let seed = 7;
+    const r = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
+    for (let i = 0; i < max; i++) {
+      const ring = 2.6 + Math.floor(i / 14) * 1.1 + r() * 0.5;
+      const a = (r() - 0.5) * Math.PI * 1.15;
+      const dx = fx * Math.cos(a) - fz * Math.sin(a);
+      const dz = fz * Math.cos(a) + fx * Math.sin(a);
+      spots.push({ x: b.position.x + dx * ring, z: b.position.z + dz * ring, ph: r() * 6.28 });
+      crowd.setColorAt(i, new THREE.Color(palette[i % palette.length]));
+    }
+    group.add(crowd);
+    const spot = new THREE.PointLight('#ffd9a0', 30, 16, 1.6);
+    spot.position.set(b.position.x, 5, b.position.z);
+    group.add(spot);
+    this.group.add(group);
+    this.perf = { group, crowd, spots, shown: 0, face: b.position, t: 0 };
+  }
+
+  /** How many people are watching. */
+  setAudience(n: number): void {
+    if (this.perf) this.perf.shown = Math.max(0, Math.min(this.perf.spots.length, Math.round(n)));
+  }
+
+  stopPerformance(): void {
+    if (!this.perf) return;
+    this.perf.group.removeFromParent();
+    this.perf.crowd.dispose();
+    this.perf = null;
+  }
+
+  private perfM = new THREE.Matrix4();
+  private perfQ = new THREE.Quaternion();
+  private perfP = new THREE.Vector3();
+  private perfS = new THREE.Vector3();
+
+  private updatePerformance(dt: number) {
+    const p = this.perf;
+    if (!p) return;
+    p.t += dt;
+    const n = Math.min(p.shown, p.spots.length);
+    p.crowd.count = n;
+    for (let i = 0; i < n; i++) {
+      const s = p.spots[i];
+      const sway = Math.max(0, Math.sin(p.t * 6.5 + s.ph)) * 0.12;
+      this.perfM.compose(this.perfP.set(s.x, 0.3 + sway, s.z), this.perfQ, this.perfS.set(0.34, 0.62, 0.34));
+      p.crowd.setMatrixAt(i, this.perfM);
+    }
+    p.crowd.instanceMatrix.needsUpdate = true;
+  }
+
   /** Glowing arcs from a point (e.g. a label tower's roof) to places across the city. */
   links(from: Vec2, fromHeight: number, targets: Vec2[], color = '#ffd27a'): void {
     for (const p of targets) {
@@ -738,7 +874,7 @@ export class CityView {
     }
     while (o) {
       const k = o.userData.kind;
-      if (k === 'venue' || k === 'landmark' || k === 'label' || k === 'busker') return { kind: k, id: o.userData.id };
+      if (k === 'venue' || k === 'landmark' || k === 'label' || k === 'busker' || k === 'home' || k === 'billboard') return { kind: k, id: o.userData.id };
       o = o.parent;
     }
     return null;

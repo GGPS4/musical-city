@@ -269,6 +269,19 @@ export class CityScene {
       const model = this.city.towers.get(t.id);
       this.labels.add('label', t.id, t.name, 'Record label', new THREE.Vector3(t.position.x, (model?.height ?? 40) + 4, t.position.z), [0, plan.size * 0.9]);
     }
+    for (const h of plan.homes) {
+      const a = plan.artists.find((x) => x.id === h.artistId);
+      const model = this.city.homes.get(h.id);
+      this.labels.add('home', h.id, a ? `${a.name}’s place` : 'Artist home', null, new THREE.Vector3(h.position.x, (model?.height ?? 5) + 3.2, h.position.z), [0, plan.size * 0.2]);
+    }
+    for (const st of plan.streets) {
+      for (const f of [0.2, 0.5, 0.8]) {
+        const along = st.from + (st.to - st.from) * f + plan.pitch / 2;
+        const clamped = Math.min(st.to - 2, along);
+        const pos = st.axis === 'x' ? new THREE.Vector3(clamped, 0.6, st.c) : new THREE.Vector3(st.c, 0.6, clamped);
+        this.labels.add('street', st.id, st.name, null, pos, [0, plan.size * 0.13]);
+      }
+    }
     for (const b of plan.buskers) {
       this.labels.add('busker', b.id, b.name, 'Busker', new THREE.Vector3(b.position.x, 4.4, b.position.z), [0, plan.size * 0.16]);
     }
@@ -291,6 +304,11 @@ export class CityScene {
     const model = this.city?.venues.get(id);
     if (!v || !plan) return;
     this.labels.add('venue', v.id, v.name, null, new THREE.Vector3(v.position.x, (model?.height ?? 4) + 5.5, v.position.z), [0, plan.size * 0.42]);
+  }
+
+  /** Point on the ground the camera is looking at. */
+  lookTarget(): Vec2 {
+    return { x: this.controls.target.x, z: this.controls.target.z };
   }
 
   get currentCity(): CityView | null {
@@ -335,13 +353,13 @@ export class CityScene {
   }
 
   /** Smoothly frames a place. `distance` is camera distance from it. */
-  focus(pos: Vec2, distance = 46, height = 4, duration = 1.1): void {
+  focus(pos: Vec2, distance = 46, height = 4, duration = 1.1, elevation = 0.9): void {
     const target = new THREE.Vector3(pos.x, height, pos.z);
     const dir = this.camera.position.clone().sub(this.controls.target);
     dir.y = 0;
     if (dir.lengthSq() < 1) dir.set(1, 0, 1);
     dir.normalize();
-    const elev = 0.9;
+    const elev = elevation;
     const camPos = target.clone().add(dir.multiplyScalar(distance * Math.cos(elev))).add(new THREE.Vector3(0, distance * Math.sin(elev), 0));
     this.flyTo(camPos, target, duration);
   }
@@ -511,6 +529,10 @@ export class CityScene {
     const city = this.city;
     city?.update(dt);
     this.applyMood(dt);
+    if (this.viz && city?.finished && this.time - this.vizLast > 1 / 30) {
+      this.vizLast = this.time;
+      city.visualise(this.viz());
+    }
 
     if (this.walk.active) {
       this.walk.update(dt, this.time);
@@ -583,6 +605,34 @@ export class CityScene {
       this.renderer.shadowMap.enabled = false;
       this.resize();
     }
+  }
+
+  /* ---------------- visualiser & billboards ---------------- */
+
+  private viz: (() => number[]) | null = null;
+  private vizLast = 0;
+
+  /** Turns the skyline into a spectrum analyser driven by `levels`, or off with null. */
+  setVisualiser(levels: (() => number[]) | null): void {
+    this.viz = levels;
+    if (!levels) this.city?.visualise(null);
+  }
+
+  get visualising(): boolean {
+    return !!this.viz;
+  }
+
+  private texLoader = new THREE.TextureLoader().setCrossOrigin('anonymous');
+
+  /** Swaps a billboard's made-up sleeve for the real cover once it has loaded. */
+  setBillboardArt(id: string, url: string): void {
+    const model = this.city?.billboards.get(id);
+    if (!model) return;
+    this.texLoader.load(url, (tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 4;
+      if (this.city?.billboards.get(id) === model) model.setArt(tex);
+    });
   }
 
   /* ---------------- mood ---------------- */

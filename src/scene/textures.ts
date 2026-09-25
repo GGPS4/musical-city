@@ -210,3 +210,68 @@ export function noteTexture(): THREE.Texture {
   ctx.fillText('♪', 32, 34);
   return finish('note', c);
 }
+
+/** A made-up album sleeve (used until the real cover loads, or when it can't). */
+export function sleeveTexture(artist: string, title: string, seed: number, colors: [string, string, string]): THREE.Texture {
+  const key = `sleeve|${artist}|${title}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const S = 512;
+  const [c, ctx] = canvas(S, S);
+  const [c1, c2, c3] = colors;
+  ctx.fillStyle = c3;
+  ctx.fillRect(0, 0, S, S);
+  const pattern = seed % 5;
+  if (pattern === 0) {
+    for (let i = -S; i < S * 2; i += 64) {
+      ctx.fillStyle = c1;
+      ctx.beginPath();
+      ctx.moveTo(i, 0);
+      ctx.lineTo(i + 28, 0);
+      ctx.lineTo(i + 28 - S * 0.7, S);
+      ctx.lineTo(i - S * 0.7, S);
+      ctx.fill();
+    }
+  } else if (pattern === 1) {
+    ctx.fillStyle = c2;
+    ctx.beginPath();
+    ctx.arc(S * 0.62, S * 0.4, S * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = c1;
+    ctx.beginPath();
+    ctx.arc(S * 0.62, S * 0.4, S * 0.18, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (pattern === 2) {
+    for (let y = 0; y < S; y += 64) for (let x = (y / 64) % 2 ? 0 : 64; x < S; x += 128) {
+      ctx.fillStyle = (x + y) % 256 ? c1 : c2;
+      ctx.fillRect(x, y, 64, 64);
+    }
+  } else if (pattern === 3) {
+    ctx.fillStyle = c1;
+    ctx.fillRect(0, 0, S * 0.45, S);
+    ctx.fillStyle = c2;
+    ctx.fillRect(S * 0.55, 0, S * 0.45, S);
+  } else {
+    ctx.fillStyle = c1;
+    for (let y = 30; y < S; y += 44) for (let x = 30; x < S; x += 44) {
+      ctx.beginPath();
+      ctx.arc(x, y, 9, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.fillStyle = 'rgba(6,6,10,0.78)';
+  ctx.fillRect(28, S - 170, S - 56, 142);
+  ctx.fillStyle = '#f4f1ff';
+  ctx.textBaseline = 'top';
+  let size = 48;
+  ctx.font = `700 ${size}px ${SIGN_FONT}`;
+  const name = artist.toUpperCase();
+  while (ctx.measureText(name).width > S - 96 && size > 20) ctx.font = `700 ${(size -= 2)}px ${SIGN_FONT}`;
+  ctx.fillText(name, 48, S - 150);
+  size = 32;
+  ctx.font = `500 ${size}px ${SIGN_FONT}`;
+  while (ctx.measureText(title).width > S - 96 && size > 14) ctx.font = `500 ${(size -= 2)}px ${SIGN_FONT}`;
+  ctx.fillStyle = '#d9d6ea';
+  ctx.fillText(title, 48, S - 88);
+  return finish(key, c);
+}

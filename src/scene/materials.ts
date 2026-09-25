@@ -10,6 +10,8 @@ export const cityUniforms = {
   /** Set by the mood: tint and brightness of lit windows. */
   uMoodTint: { value: new THREE.Color(1, 1, 1) },
   uMoodLit: { value: 1 },
+  /** Visualiser beat: windows flash with the bass. */
+  uBeat: { value: 0 },
 };
 
 export interface FacadeOptions {
@@ -101,7 +103,7 @@ export function facadeMaterial(key: string, o: FacadeOptions): THREE.MeshStandar
         varying vec3 vFcWorld;
         varying vec3 vFcNormal;
         varying vec3 vFcCenter;
-        uniform float uBay, uFloor, uLit, uCoolMix, uIntensity, uLights, uStore, uTime, uMoodLit;
+        uniform float uBay, uFloor, uLit, uCoolMix, uIntensity, uLights, uStore, uTime, uMoodLit, uBeat;
         uniform vec3 uMoodTint;
         uniform vec2 uWin;
         uniform vec3 uWarm, uCool, uGlass;
@@ -139,7 +141,7 @@ export function facadeMaterial(key: string, o: FacadeOptions): THREE.MeshStandar
           diffuseColor.rgb *= mix(0.55, 1.0, wall);
           diffuseColor.rgb *= mix(0.55, 1.0, smoothstep(0.0, 2.5, vFcWorld.y));
           diffuseColor.rgb = mix(diffuseColor.rgb, uGlass, win * 0.85);
-          totalEmissiveRadiance += wc * uMoodTint * uMoodLit * win * lit * uLights * uIntensity * (0.55 + 0.9 * fract(seed * 13.7)) * flicker;
+          totalEmissiveRadiance += wc * uMoodTint * uMoodLit * (1.0 + uBeat * 1.6) * win * lit * uLights * uIntensity * (0.55 + 0.9 * fract(seed * 13.7)) * flicker;
           // Shopfront glow on the ground floor.
           float store = uStore * wall * step(0.15, h) * step(h, 0.9) * step(0.55, fcHash(floor(vec2(u / (uBay * 2.0), 1.0)) + vFcCenter.xz));
           totalEmissiveRadiance += uWarm * uMoodTint * store * uLights * 0.9;
