@@ -191,3 +191,10 @@ test('external genre tags map onto city genres', async () => {
   assert.equal(genresFromTags([{ name: 'indie rock', count: 4 }, { name: 'rock', count: 1 }])[0], 'indie');
   assert.deepEqual(genresFromTags([{ name: 'polka', count: 2 }]), []);
 });
+
+test('song titles de-duplicate across remasters and spellings', async () => {
+  const { songKey } = await import('../src/music/musicService.js');
+  assert.equal(songKey('Anarchy in the U.K.'), songKey('Anarchy In The UK (Remastered 2007)'));
+  assert.equal(songKey('London Calling'), songKey('London Calling - Remastered'));
+  assert.notEqual(songKey('London Calling'), songKey('Train in Vain'));
+});
