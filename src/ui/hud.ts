@@ -12,6 +12,7 @@ import { $, ICONS, esc, onAction } from './dom.js';
 export interface HudActions {
   select(sel: Selection, opts?: { fly?: boolean }): void;
   listen(artistId: string): void;
+  listenLandmark(landmarkId: string): void;
   playTrack(track: Track): void;
   togglePlayer(): void;
   stopPlayer(): void;
@@ -86,6 +87,8 @@ export class Hud {
         return this.actions.select({ kind: 'district', genre: d.genre as GenreId }, { fly: true });
       case 'listen':
         return this.actions.listen(d.id ?? '');
+      case 'listen-landmark':
+        return this.actions.listenLandmark(d.id ?? '');
       case 'play': {
         const tracks = this.trackCache.get(d.artist ?? '');
         if (tracks && tracks !== 'loading') this.actions.playTrack(tracks.tracks[Number(d.index)]);
@@ -310,8 +313,8 @@ export class Hud {
         <p class="info__meta">${esc(l.place ?? '')}<br>${esc(l.date ?? '')}</p>
         <p class="info__desc">${esc(l.description)}</p>
         <p class="info__note">The event is documented music history. The building you see is a miniature inspired by it, not a replica.</p>
-        ${this.artistsList(l.artistIds)}
-        ${this.listenBlock(l.artistIds.filter((a) => plan.userArtistIds.includes(a)).concat(l.artistIds.filter((a) => !plan.userArtistIds.includes(a))))}`;
+        ${this.soundtrackBlock(l.id)}
+        ${this.artistsList(l.artistIds)}`;
     }
     const g = l.genres[0];
     return `<span class="badge badge--insp">Musical interpretation</span>
@@ -320,6 +323,23 @@ export class Hud {
       <p class="info__desc">${esc(l.description)}</p>
       <p class="info__note">A fictional monument generated from ${esc(GENRES[g].scene)}.</p>
       <div class="info__section"><h4>District</h4><div class="tags">${genreChip(g)}</div></div>`;
+  }
+
+  /** The album/songs tied to a historical landmark. */
+  private soundtrackBlock(id: string): string {
+    const l = this.plan!.landmarks.find((x) => x.id === id);
+    const st = l?.soundtrack;
+    if (!st) return '';
+    const name = (aid: string) => ARTIST_BY_ID[aid]?.name ?? '';
+    const key = `lm:${id}`;
+    const multi = new Set(st.songs.map((s) => s.artistId)).size > 1;
+    return `<div class="info__section soundtrack"><h4>Soundtrack</h4>
+      ${st.album ? `<p class="album"><strong>${esc(st.album.title)}</strong> (${st.album.year}) · ${esc(name(st.album.artistId))}</p>` : ''}
+      <p class="songs">${st.songs.map((s) => esc(s.title) + (multi ? ` <span class="songs__by">(${esc(name(s.artistId))})</span>` : '')).join(' · ')}</p>
+      <p class="soundtrack__note">${esc(st.note)}</p>
+      <div class="info__actions"><button type="button" class="btn btn--primary btn--sm" data-action="listen-landmark" data-id="${esc(id)}">${ICONS.play} Play the soundtrack</button></div>
+      <div class="tracks" data-tracks-for="${esc(key)}">${this.trackCache.has(key) ? this.tracksHtml(key) : ''}</div>
+    </div>`;
   }
 
   private artistHtml(id: string): string {
@@ -394,26 +414,29 @@ export class Hud {
     this.info.querySelectorAll<HTMLElement>(`[data-tracks-for="${artistId}"]`).forEach((el) => (el.innerHTML = this.tracksHtml(artistId)));
   }
 
-  private tracksHtml(artistId: string): string {
-    const v = this.trackCache.get(artistId);
-    const a = ARTIST_BY_ID[artistId];
-    if (!v || !a) return '';
+  /** Track list for a cache key: an artist id, or `lm:<landmark id>` for a soundtrack. */
+  private tracksHtml(key: string): string {
+    const v = this.trackCache.get(key);
+    const a = ARTIST_BY_ID[key];
+    if (!v) return '';
     if (v === 'loading') return '<p class="tracks__loading">Finding recordings…</p>';
     const playing = this.playerState.status !== 'idle' ? this.playerState.track.previewUrl : null;
+    const soundtrack = key.startsWith('lm:');
     const rows = v.tracks
-      .map((t, i) =>
-        t.previewUrl
-          ? `<li><button type="button" class="track ${playing === t.previewUrl ? 'is-playing' : ''}" data-action="play" data-artist="${artistId}" data-index="${i}">
+      .map((t, i) => {
+        const sub = soundtrack ? t.artist : t.album ?? '';
+        return t.previewUrl
+          ? `<li><button type="button" class="track ${playing === t.previewUrl ? 'is-playing' : ''}" data-action="play" data-artist="${esc(key)}" data-index="${i}">
               ${t.artworkUrl ? `<img src="${esc(t.artworkUrl)}" alt="" loading="lazy">` : '<span class="track__art"></span>'}
-              <span class="track__main"><strong>${esc(t.title)}</strong><small>${esc(t.album ?? '')}</small></span>
+              <span class="track__main"><strong>${esc(t.title)}</strong><small>${esc(sub)}</small></span>
               <span class="track__icon">${playing === t.previewUrl && this.playerState.status === 'playing' ? ICONS.pause : ICONS.play}</span></button></li>`
-          : `<li><a class="track" href="${esc(t.externalUrl ?? streamingLinks(a, t.title)[0].url)}" target="_blank" rel="noopener">
-              <span class="track__art"></span><span class="track__main"><strong>${esc(t.title)}</strong><small>Open in Spotify</small></span><span class="track__icon">${ICONS.ext}</span></a></li>`,
-      )
+          : `<li><a class="track" href="${esc(t.externalUrl ?? searchUrl(t.artist, t.title))}" target="_blank" rel="noopener">
+              <span class="track__art"></span><span class="track__main"><strong>${esc(t.title)}</strong><small>${esc(soundtrack ? `${t.artist} · open in Spotify` : 'Open in Spotify')}</small></span><span class="track__icon">${ICONS.ext}</span></a></li>`;
+      })
       .join('');
     return `<ul class="track-list">${rows}</ul>
       <p class="tracks__source">${v.degraded ? 'Music data unavailable, showing curated data. ' : ''}${v.tracks.some((t) => t.previewUrl) ? '30-second previews via Apple Music.' : ''}
-        ${streamingLinks(a).map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`).join(' · ')}</p>`;
+        ${a ? streamingLinks(a).map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`).join(' · ') : ''}</p>`;
   }
 
   private playerKey = '';
@@ -445,6 +468,10 @@ export class Hud {
       if (this.trackCache.has(id)) el.innerHTML = this.tracksHtml(id);
     });
   }
+}
+
+function searchUrl(artist: string, title: string): string {
+  return `https://open.spotify.com/search/${encodeURIComponent(`${artist} ${title}`)}`;
 }
 
 function cap(s: string): string {

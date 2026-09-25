@@ -5,10 +5,12 @@ export const DEMO_INPUT = ['The Beatles', 'David Bowie', 'The Clash', 'The Stoog
 
 const PRESETS: { label: string; inputs: string[] }[] = [
   { label: 'The demo city', inputs: DEMO_INPUT },
-  { label: 'Manchester nights', inputs: ['Joy Division', 'New Order', 'The Smiths', 'Buzzcocks', 'Post-Punk'] },
+  { label: 'Sunset Strip', inputs: ["Guns N' Roses", 'Aerosmith', 'AC/DC', 'Van Halen', 'Hard Rock'] },
+  { label: 'Indie 2004', inputs: ['Arctic Monkeys', 'The Strokes', 'The Libertines', 'Franz Ferdinand', 'Indie'] },
+  { label: 'Desert & grunge', inputs: ['Queens of the Stone Age', 'Kyuss', 'Nirvana', 'Soundgarden', 'Foo Fighters'] },
+  { label: '90s punk', inputs: ['Green Day', 'Blink-182', 'The Offspring', 'Rancid', 'Punk'] },
+  { label: 'Manchester nights', inputs: ['Joy Division', 'New Order', 'The Smiths', 'Oasis', 'The Stone Roses'] },
   { label: 'CBGB, 1977', inputs: ['Ramones', 'Talking Heads', 'Television', 'Patti Smith', 'Blondie'] },
-  { label: 'Summer of love', inputs: ['Pink Floyd', 'The Doors', 'Jefferson Airplane', 'Psychedelic Rock'] },
-  { label: 'Synth city', inputs: ['Kraftwerk', 'Depeche Mode', 'Daft Punk', 'Electronic'] },
 ];
 
 /** Landing screen: chip-style taste input with autocomplete. */
