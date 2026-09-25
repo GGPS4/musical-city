@@ -146,3 +146,14 @@ export function customArtist(name: string): Artist {
     custom: true,
   };
 }
+
+/** The artist behind a soundtrack song: a catalogue artist, or a stand-in for outside records. */
+export function soundtrackArtist(song: { artistId?: string; artistName?: string }): Artist {
+  if (song.artistId) {
+    const a = ARTISTS.find((x) => x.id === song.artistId);
+    if (a) return a;
+  }
+  const stub = customArtist(song.artistName ?? 'Unknown artist');
+  stub.blurb = '';
+  return stub;
+}

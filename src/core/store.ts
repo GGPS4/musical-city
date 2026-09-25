@@ -1,4 +1,5 @@
 import type { CityPlan, Selection } from '../types.js';
+import type { Comparison } from './compare.js';
 
 type Listener<T> = (state: T, prev: T) => void;
 
@@ -28,7 +29,7 @@ export class Store<T extends object> {
 }
 
 export type Phase = 'landing' | 'building' | 'city';
-export type Tab = 'districts' | 'venues' | 'landmarks' | 'artists';
+export type Tab = 'districts' | 'venues' | 'landmarks' | 'artists' | 'passport';
 
 export interface AppState {
   phase: Phase;
@@ -41,6 +42,8 @@ export interface AppState {
   listOpen: boolean;
   /** Increments whenever the plan is mutated in place (e.g. an artist is introduced). */
   planVersion: number;
+  compare: Comparison | null;
+  gig: { kind: 'venue' | 'landmark'; id: string; act: number } | null;
 }
 
 export const store = new Store<AppState>({
@@ -52,4 +55,6 @@ export const store = new Store<AppState>({
   tab: 'venues',
   listOpen: false,
   planVersion: 0,
+  compare: null,
+  gig: null,
 });

@@ -590,6 +590,8 @@ export function generateCity(taste: TasteInput, seed = seedFor([...taste.artists
   const cityArtistIds = new Set<string>([...home.keys(), ...userIds]);
   const artists = [
     ...ARTISTS.filter((a) => cityArtistIds.has(a.id)),
+    // Artists looked up from outside the catalogue (e.g. MusicBrainz).
+    ...input.artists.filter((a) => !ARTIST_BY_ID[a.id]),
     ...customs,
   ];
 
