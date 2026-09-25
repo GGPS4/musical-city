@@ -17,6 +17,11 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     description:
       'The Beatles played their final public performance on the roof of their Apple Corps office until police arrived and asked them to turn it down.',
     model: 'rooftop-stage',
+    soundtrack: {
+      album: { title: "Let It Be", year: 1970, artistId: 'the-beatles' },
+      songs: [{ title: "Get Back", artistId: 'the-beatles' }, { title: "Don't Let Me Down", artistId: 'the-beatles' }, { title: "I've Got a Feeling", artistId: 'the-beatles' }, { title: "One After 909", artistId: 'the-beatles' }, { title: "Dig a Pony", artistId: 'the-beatles' }],
+      note: "The rooftop set was filmed for Let It Be, and the album\u2019s versions of \u201cI\u2019ve Got a Feeling\u201d, \u201cOne After 909\u201d and \u201cDig a Pony\u201d come from that afternoon.",
+    },
   },
   {
     id: 'beatles-abbey-road',
@@ -28,6 +33,11 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     description:
       'The zebra crossing photographed for the cover of Abbey Road, with the four Beatles walking in single file.',
     model: 'crossing',
+    soundtrack: {
+      album: { title: "Abbey Road", year: 1969, artistId: 'the-beatles' },
+      songs: [{ title: "Come Together", artistId: 'the-beatles' }, { title: "Here Comes the Sun", artistId: 'the-beatles' }, { title: "Something", artistId: 'the-beatles' }, { title: "Golden Slumbers", artistId: 'the-beatles' }],
+      note: "The crossing is the cover of Abbey Road, recorded at the studio behind it.",
+    },
   },
   {
     id: 'beatles-cavern',
@@ -39,6 +49,11 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     description:
       'The cellar club where the Beatles played hundreds of lunchtime and evening shows before fame, and where Brian Epstein first saw them in 1961.',
     model: 'cellar-club',
+    soundtrack: {
+      album: { title: "Please Please Me", year: 1963, artistId: 'the-beatles' },
+      songs: [{ title: "Twist and Shout", artistId: 'the-beatles' }, { title: "I Saw Her Standing There", artistId: 'the-beatles' }, { title: "Please Please Me", artistId: 'the-beatles' }],
+      note: "Songs from the early Beatles, the era of their Cavern Club residency.",
+    },
   },
   {
     id: 'pistols-jubilee-boat',
@@ -50,6 +65,11 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     description:
       'During the Queen’s Silver Jubilee the Sex Pistols played on a hired boat as it passed Parliament. Police met the boat when it docked and made arrests.',
     model: 'boat',
+    soundtrack: {
+      album: { title: "Never Mind the Bollocks, Here\u2019s the Sex Pistols", year: 1977, artistId: 'sex-pistols' },
+      songs: [{ title: "God Save the Queen", artistId: 'sex-pistols' }, { title: "Anarchy in the U.K.", artistId: 'sex-pistols' }, { title: "Pretty Vacant", artistId: 'sex-pistols' }],
+      note: "\u201cGod Save the Queen\u201d was released for the Jubilee week, and both songs were played on the boat.",
+    },
     onWater: true,
   },
   {
@@ -62,6 +82,10 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     description:
       'A small Sex Pistols show organised by Buzzcocks’ Howard Devoto and Pete Shelley. Future members of Joy Division were in the audience.',
     model: 'hall',
+    soundtrack: {
+      songs: [{ title: "Pretty Vacant", artistId: 'sex-pistols' }, { title: "Boredom", artistId: 'buzzcocks' }, { title: "Transmission", artistId: 'joy-division' }],
+      note: "The Sex Pistols of 1976, plus what the audience went on to make.",
+    },
   },
   {
     id: 'bowie-hansa',
@@ -73,6 +97,11 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     description:
       'The studio close to the Berlin Wall where Bowie recorded “Heroes” with Brian Eno, and where Iggy Pop recorded Lust for Life.',
     model: 'studio-wall',
+    soundtrack: {
+      album: { title: "\u201cHeroes\u201d", year: 1977, artistId: 'david-bowie' },
+      songs: [{ title: "\u201cHeroes\u201d", artistId: 'david-bowie' }, { title: "Beauty and the Beast", artistId: 'david-bowie' }, { title: "Lust for Life", artistId: 'iggy-pop' }, { title: "The Passenger", artistId: 'iggy-pop' }],
+      note: "Recorded at Hansa in 1977.",
+    },
   },
   {
     id: 'bowie-hammersmith',
@@ -84,6 +113,11 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     description:
       'At the end of the Ziggy Stardust tour Bowie told the crowd it was “the last show that we’ll ever do”: the retirement of Ziggy.',
     model: 'theater',
+    soundtrack: {
+      album: { title: "The Rise and Fall of Ziggy Stardust and the Spiders from Mars", year: 1972, artistId: 'david-bowie' },
+      songs: [{ title: "Rock 'n' Roll Suicide", artistId: 'david-bowie' }, { title: "Ziggy Stardust", artistId: 'david-bowie' }, { title: "Starman", artistId: 'david-bowie' }],
+      note: "The Ziggy Stardust songs; \u201cRock \u2019n\u2019 Roll Suicide\u201d closed the final show.",
+    },
   },
   {
     id: 'clash-palladium',
@@ -95,6 +129,11 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     description:
       'Pennie Smith photographed Paul Simonon smashing his bass on stage. The shot became the cover of London Calling.',
     model: 'theater',
+    soundtrack: {
+      album: { title: "London Calling", year: 1979, artistId: 'the-clash' },
+      songs: [{ title: "London Calling", artistId: 'the-clash' }, { title: "Train in Vain", artistId: 'the-clash' }, { title: "Spanish Bombs", artistId: 'the-clash' }],
+      note: "The photo taken that night became this album\u2019s cover.",
+    },
   },
   {
     id: 'stooges-cincinnati',
@@ -106,6 +145,11 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     description:
       'Iggy Pop walked out onto the outstretched hands of the crowd during the Stooges’ set, a moment caught on television.',
     model: 'festival-stage',
+    soundtrack: {
+      album: { title: "Fun House", year: 1970, artistId: 'the-stooges' },
+      songs: [{ title: "TV Eye", artistId: 'the-stooges' }, { title: "1970", artistId: 'the-stooges' }, { title: "Down on the Street", artistId: 'the-stooges' }],
+      note: "Fun House came out a few weeks after the festival. “TV Eye” and “1970” were in the Stooges’ set that day.",
+    },
   },
   {
     id: 'floyd-battersea',
@@ -117,6 +161,11 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     description:
       'Photographed for the cover of Animals (1977). During the shoot the giant inflatable pig broke free of its moorings and drifted away.',
     model: 'power-station',
+    soundtrack: {
+      album: { title: "Animals", year: 1977, artistId: 'pink-floyd' },
+      songs: [{ title: "Pigs (Three Different Ones)", artistId: 'pink-floyd' }, { title: "Dogs", artistId: 'pink-floyd' }, { title: "Sheep", artistId: 'pink-floyd' }],
+      note: "The power station is the cover of Animals, and the pig is its mascot.",
+    },
     onWater: true,
   },
   {
@@ -129,6 +178,11 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     description:
       'The short-lived underground club at the centre of London’s psychedelic scene, where Pink Floyd were regular headliners with liquid light shows.',
     model: 'cellar-club',
+    soundtrack: {
+      album: { title: "The Piper at the Gates of Dawn", year: 1967, artistId: 'pink-floyd' },
+      songs: [{ title: "Interstellar Overdrive", artistId: 'pink-floyd' }, { title: "Astronomy Domine", artistId: 'pink-floyd' }, { title: "Arnold Layne", artistId: 'pink-floyd' }],
+      note: "The Syd Barrett-era Pink Floyd of the UFO Club nights.",
+    },
   },
   {
     id: 'stones-hyde-park',
@@ -140,6 +194,10 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     description:
       'A free concert two days after the death of founding member Brian Jones, played to an enormous crowd.',
     model: 'park-stage',
+    soundtrack: {
+      songs: [{ title: "Honky Tonk Women", artistId: 'the-rolling-stones' }, { title: "Sympathy for the Devil", artistId: 'the-rolling-stones' }, { title: "Midnight Rambler", artistId: 'the-rolling-stones' }],
+      note: "\u201cHonky Tonk Women\u201d came out as a single the day before the show.",
+    },
   },
   {
     id: 'queen-live-aid',
@@ -151,6 +209,10 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     description:
       'Queen’s short Live Aid set is widely remembered as one of rock’s great live performances. Bowie also played that day.',
     model: 'stadium',
+    soundtrack: {
+      songs: [{ title: "Bohemian Rhapsody", artistId: 'queen' }, { title: "Radio Ga Ga", artistId: 'queen' }, { title: "We Are the Champions", artistId: 'queen' }, { title: "Hammer to Fall", artistId: 'queen' }],
+      note: "Songs from Queen\u2019s Live Aid set.",
+    },
   },
   {
     id: 'cbgb',
@@ -162,6 +224,10 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     description:
       'The Bowery club that became the home of New York punk and new wave. Television, the Ramones, Patti Smith, Blondie and Talking Heads all played there early on.',
     model: 'bowery-club',
+    soundtrack: {
+      songs: [{ title: "Blitzkrieg Bop", artistId: 'the-ramones' }, { title: "Marquee Moon", artistId: 'television' }, { title: "Gloria", artistId: 'patti-smith' }, { title: "Psycho Killer", artistId: 'talking-heads' }, { title: "X Offender", artistId: 'blondie' }],
+      note: "One signature song from each of the CBGB regulars.",
+    },
   },
   {
     id: 'stop-making-sense',
@@ -172,6 +238,11 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     date: 'December 1983',
     description: 'Where Talking Heads filmed the concert film Stop Making Sense, directed by Jonathan Demme.',
     model: 'theater',
+    soundtrack: {
+      album: { title: "Stop Making Sense", year: 1984, artistId: 'talking-heads' },
+      songs: [{ title: "Once in a Lifetime", artistId: 'talking-heads' }, { title: "Psycho Killer", artistId: 'talking-heads' }, { title: "Burning Down the House", artistId: 'talking-heads' }],
+      note: "The concert film\u2019s soundtrack album.",
+    },
   },
   {
     id: 'warhol-factory',
@@ -183,6 +254,11 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     description:
       'Andy Warhol’s silver-painted studio. Warhol managed the Velvet Underground and is credited as producer of their 1967 debut.',
     model: 'silver-factory',
+    soundtrack: {
+      album: { title: "The Velvet Underground & Nico", year: 1967, artistId: 'the-velvet-underground' },
+      songs: [{ title: "I'm Waiting for the Man", artistId: 'the-velvet-underground' }, { title: "Sunday Morning", artistId: 'the-velvet-underground' }, { title: "Venus in Furs", artistId: 'the-velvet-underground' }],
+      note: "The album Warhol produced, with his banana on the cover.",
+    },
   },
   {
     id: 'hacienda',
@@ -193,6 +269,10 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     date: 'Opened May 1982',
     description: 'The Manchester club run by Factory Records and part-funded by New Order.',
     model: 'studio',
+    soundtrack: {
+      songs: [{ title: "Blue Monday", artistId: 'new-order' }, { title: "Temptation", artistId: 'new-order' }, { title: "Fine Time", artistId: 'new-order' }],
+      note: "New Order in the club they helped fund.",
+    },
   },
   {
     id: 'kling-klang',
@@ -203,6 +283,10 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     date: 'From 1970',
     description: 'Kraftwerk’s own studio, where they built instruments and recorded their classic albums.',
     model: 'studio',
+    soundtrack: {
+      songs: [{ title: "Trans-Europe Express", artistId: 'kraftwerk' }, { title: "The Robots", artistId: 'kraftwerk' }, { title: "Autobahn", artistId: 'kraftwerk' }],
+      note: "Recorded by Kraftwerk in their own studio.",
+    },
   },
   {
     id: 'hendrix-woodstock',
@@ -214,6 +298,10 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     description:
       'Hendrix closed the Woodstock festival on its final morning, including his solo reworking of “The Star-Spangled Banner”.',
     model: 'festival-stage',
+    soundtrack: {
+      songs: [{ title: "The Star-Spangled Banner", artistId: 'jimi-hendrix' }, { title: "Purple Haze", artistId: 'jimi-hendrix' }, { title: "Voodoo Child (Slight Return)", artistId: 'jimi-hendrix' }],
+      note: "All played in Hendrix\u2019s Woodstock set.",
+    },
   },
   {
     id: 'whisky-a-go-go',
@@ -224,6 +312,11 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     date: '1966',
     description: 'The Sunset Strip club where the Doors were the house band before their debut album.',
     model: 'bowery-club',
+    soundtrack: {
+      album: { title: "The Doors", year: 1967, artistId: 'the-doors' },
+      songs: [{ title: "Light My Fire", artistId: 'the-doors' }, { title: "Break On Through (To the Other Side)", artistId: 'the-doors' }, { title: "The End", artistId: 'the-doors' }],
+      note: "Songs the Doors were playing on the Strip before their debut came out.",
+    },
   },
   {
     id: 'live-at-leeds',
@@ -234,6 +327,11 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     date: '14 February 1970',
     description: 'The Who recorded the live album Live at Leeds in the university’s refectory hall.',
     model: 'hall',
+    soundtrack: {
+      album: { title: "Live at Leeds", year: 1970, artistId: 'the-who' },
+      songs: [{ title: "Summertime Blues", artistId: 'the-who' }, { title: "Young Man Blues", artistId: 'the-who' }, { title: "My Generation", artistId: 'the-who' }],
+      note: "The live album recorded that night.",
+    },
   },
   {
     id: 'nirvana-unplugged',
@@ -244,6 +342,11 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     date: '18 November 1993',
     description: 'Nirvana’s acoustic set, staged with lilies and candles, released as an album in 1994.',
     model: 'studio',
+    soundtrack: {
+      album: { title: "MTV Unplugged in New York", year: 1994, artistId: 'nirvana' },
+      songs: [{ title: "About a Girl", artistId: 'nirvana' }, { title: "The Man Who Sold the World", artistId: 'nirvana' }, { title: "Where Did You Sleep Last Night", artistId: 'nirvana' }],
+      note: "The album of that night\u2019s set.",
+    },
   },
   {
     id: 'salford-lads-club',
@@ -254,6 +357,11 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     date: '1985',
     description: 'The band were photographed outside the club for the inner sleeve of The Queen Is Dead (1986).',
     model: 'hall',
+    soundtrack: {
+      album: { title: "The Queen Is Dead", year: 1986, artistId: 'the-smiths' },
+      songs: [{ title: "The Queen Is Dead", artistId: 'the-smiths' }, { title: "Bigmouth Strikes Again", artistId: 'the-smiths' }, { title: "There Is a Light That Never Goes Out", artistId: 'the-smiths' }],
+      note: "The album whose sleeve features the club.",
+    },
   },
   {
     id: 'depeche-rose-bowl',
@@ -264,6 +372,11 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     date: '18 June 1988',
     description: 'The final show of the Music for the Masses tour, filmed for the documentary 101.',
     model: 'stadium',
+    soundtrack: {
+      album: { title: "101", year: 1989, artistId: 'depeche-mode' },
+      songs: [{ title: "Everything Counts", artistId: 'depeche-mode' }, { title: "Never Let Me Down Again", artistId: 'depeche-mode' }, { title: "Strangelove", artistId: 'depeche-mode' }],
+      note: "The live album and film recorded around this show.",
+    },
   },
   {
     id: 'mc5-chicago',
@@ -274,6 +387,91 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
     date: 'August 1968',
     description: 'MC5 played in the park during the protests around the Democratic National Convention.',
     model: 'park-stage',
+    soundtrack: {
+      album: { title: "Kick Out the Jams", year: 1969, artistId: 'mc5' },
+      songs: [{ title: "Kick Out the Jams", artistId: 'mc5' }, { title: "Ramblin\u2019 Rose", artistId: 'mc5' }],
+      note: "The MC5 of 1968\u201369.",
+    },
+  },
+  {
+    id: 'gnr-troubadour',
+    name: "The Troubadour",
+    type: 'historical',
+    artistIds: ["guns-n-roses"],
+    place: "Santa Monica Boulevard, West Hollywood",
+    date: "26 March 1985",
+    description:
+      "The club where Guns N\u2019 Roses played their first show under that name, part of the Sunset Strip scene that shaped the band.",
+    model: 'bowery-club',
+    soundtrack: {
+      album: { title: "Appetite for Destruction", year: 1987, artistId: 'guns-n-roses' },
+      songs: [{ title: "Welcome to the Jungle", artistId: 'guns-n-roses' }, { title: "Sweet Child o' Mine", artistId: 'guns-n-roses' }, { title: "Paradise City", artistId: 'guns-n-roses' }],
+      note: "The debut album that came out of those Hollywood club years.",
+    },
+  },
+  {
+    id: 'arctic-grapes',
+    name: "The Grapes",
+    type: 'historical',
+    artistIds: ["arctic-monkeys"],
+    place: "Trippet Lane, Sheffield",
+    date: "13 June 2003",
+    description:
+      "The small Sheffield pub where Arctic Monkeys played their first gig, long before their demos spread online.",
+    model: 'cellar-club',
+    soundtrack: {
+      album: { title: "Whatever People Say I Am, That\u2019s What I\u2019m Not", year: 2006, artistId: 'arctic-monkeys' },
+      songs: [{ title: "I Bet You Look Good on the Dancefloor", artistId: 'arctic-monkeys' }, { title: "When the Sun Goes Down", artistId: 'arctic-monkeys' }, { title: "Mardy Bum", artistId: 'arctic-monkeys' }],
+      note: "The debut album, full of songs about Sheffield nights out.",
+    },
+  },
+  {
+    id: 'qotsa-rancho',
+    name: "Rancho de la Luna",
+    type: 'historical',
+    artistIds: ["queens-of-the-stone-age", "kyuss"],
+    place: "Joshua Tree, California",
+    date: "From 1997",
+    description:
+      "The desert studio where Josh Homme began his Desert Sessions recordings, a meeting point for the Palm Desert scene around Kyuss and Queens of the Stone Age.",
+    model: 'studio',
+    soundtrack: {
+      album: { title: "Songs for the Deaf", year: 2002, artistId: 'queens-of-the-stone-age' },
+      songs: [{ title: "No One Knows", artistId: 'queens-of-the-stone-age' }, { title: "Go with the Flow", artistId: 'queens-of-the-stone-age' }, { title: "Green Machine", artistId: 'kyuss' }],
+      note: "Desert rock from the scene around the studio.",
+    },
+  },
+  {
+    id: 'oasis-knebworth',
+    name: "Knebworth",
+    type: 'historical',
+    artistIds: ["oasis"],
+    place: "Knebworth Park, Hertfordshire",
+    date: "10\u201311 August 1996",
+    description:
+      "Two nights in front of around 250,000 people, often remembered as the peak of Britpop.",
+    model: 'festival-stage',
+    soundtrack: {
+      album: { title: "(What\u2019s the Story) Morning Glory?", year: 1995, artistId: 'oasis' },
+      songs: [{ title: "Wonderwall", artistId: 'oasis' }, { title: "Champagne Supernova", artistId: 'oasis' }, { title: "Don't Look Back in Anger", artistId: 'oasis' }],
+      note: "Songs from the album Oasis were touring that summer.",
+    },
+  },
+  {
+    id: 'greenday-woodstock94',
+    name: "Woodstock \u201994",
+    type: 'historical',
+    artistIds: ["green-day"],
+    place: "Saugerties, New York",
+    date: "14 August 1994",
+    description:
+      "Green Day\u2019s set turned into a mud fight between the band and the crowd, months after Dookie came out.",
+    model: 'festival-stage',
+    soundtrack: {
+      album: { title: "Dookie", year: 1994, artistId: 'green-day' },
+      songs: [{ title: "Basket Case", artistId: 'green-day' }, { title: "Longview", artistId: 'green-day' }, { title: "When I Come Around", artistId: 'green-day' }],
+      note: "Songs from Dookie, the album they were touring.",
+    },
   },
 ];
 
