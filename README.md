@@ -14,6 +14,13 @@ Type in a few artists or genres (try *The Beatles, David Bowie, The Clash, The S
 - **Crate digging.** In any record store, **Dig the crates** opens a crate of records filed by genre, then A–Z. Flip through them with scroll, swipe or the arrow keys, and each record plays a preview from that album. The real cover appears once Apple's API returns it.
 - **Record label towers.** Real labels (Motown, Blue Note, Factory, Sub Pop, Def Jam, Island and about 50 more) get a tower if their artists are in your city. Click a tower for its founding year, city and founders, and glowing lines to wherever its artists play. You can also play the roster.
 - **Street buskers.** Fictional buskers stand on street corners, each working through one artist's songs. Click one to listen or toss a coin for another song. When you walk past, you hear them.
+- **Song-named streets.** Every street is named after a song by an artist in your city (*Heroes Boulevard*, *Pretty Vacant Street*). Click a sign to hear the song, and see which venues and landmarks are on that street. When you walk, a street sign shows where you are.
+- **Plaques.** Each venue has a brass plaque with short facts about its artists: where they're from, their essential album, their labels and their landmark. Read them in the venue panel, or while walking past.
+- **Album billboards.** Rooftop billboards show real album covers from Apple's API, with a made-up sleeve until the cover loads. Click one to play the album or find it in the nearest record store's crate.
+- **Artist homes.** Imagined homes (house, studio or loft) for your artists and others in town. Open one for facts and a discography: click an album to play its tracks.
+- **Guided tours.** A Tours tab offers themed tours (Beatlemania, Punk Year Zero, Kingston Sound…), a chronological grand tour, Label row and your artists' homes. The camera flies stop to stop with captions and a song at each stop, and landmarks get stamped in your passport.
+- **Busk on a corner.** Pick an instrument and whose songs to play, and you busk on the nearest free corner. A crowd gathers while the music plays, and tips land in your case.
+- **Visualiser.** The skyline becomes a spectrum analyser: buildings stretch with the music (bass on the left, treble on the right) and windows flash on the beat. It reads the real preview audio through Web Audio.
 - **Mood.** Six moods (City night, After hours, Golden hour, Riot, Rainy day, Daydream) change the sky, fog, window light, bloom and weather (rain, lightning, floating sparkles), then play artists from your city that fit. The mood is saved in the share link.
 - **Historical landmarks.** Thirty landmarks based on documented events: the Beatles' rooftop concert (30 Jan 1969), the Abbey Road crossing, the Cavern Club, the Sex Pistols' Jubilee boat trip, Hansa Studios, CBGB, the Troubadour, Knebworth and more. They carry a gold *Historical landmark* badge, with the place and date. Each model is a miniature *inspired by* the place, not a replica. Every genre also gets a fictional monument, labelled *Musical interpretation*.
 - **Landmark soundtracks.** Each landmark has the music tied to it: Abbey Road plays *Abbey Road*, the rooftop concert plays *Let It Be* (“Get Back”, “Don't Let Me Down”…), Battersea plays *Animals*. **Play the soundtrack** finds official previews of those exact songs.
@@ -80,17 +87,18 @@ src/
     compare.ts             Taste overlap, shared genres, district ownership
     passport.ts            Landmark stamps and scenes (localStorage)
     crate.ts               Which records a record store's crate holds
+    tours.ts               Venue plaque facts and guided tours
     random.ts, store.ts    Seeded PRNG, tiny observable store
   music/musicService.ts    Provider abstraction, preview player
   music/artistLookup.ts    MusicBrainz + iTunes lookups for artists outside the catalogue
-  app/                     Feature controllers: walking, gig night, compare, poster, crates, mood
+  app/                     Feature controllers: walking, gig night, compare, poster, crates, mood, tours, busking, visualiser
   scene/                   Rendering
     CityScene.ts           Renderer, camera, controls, bloom, picking, camera moves, build intro, poster capture
     walk.ts                First-person walking with collisions
     mood.ts                Mood looks, blending, rain and sparkles
     cityBuilder.ts         CityPlan → meshes; build animation; selection/beam/arc helpers
     buildings.ts           Building archetypes composed from instanced parts
-    models.ts              Venue, landmark, monument, label tower and busker models
+    models.ts              Venue, landmark, monument, label tower, busker, home and billboard models
     materials.ts           Shared materials, including the procedural window shader
     instancer.ts           Instanced batches with per-instance grow/pop animation
     geometries.ts, textures.ts, labels.ts

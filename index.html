@@ -91,11 +91,16 @@
           <button type="button" class="dock__btn" data-action="tab" data-tab="landmarks" aria-pressed="false">Landmarks</button>
           <button type="button" class="dock__btn" data-action="tab" data-tab="artists" aria-pressed="false">Artists</button>
           <button type="button" class="dock__btn" data-action="tab" data-tab="passport" aria-pressed="false">Passport</button>
+          <button type="button" class="dock__btn" data-action="tab" data-tab="tours" aria-pressed="false">Tours</button>
           <span class="dock__sep" aria-hidden="true"></span>
           <button type="button" class="dock__btn dock__btn--discover" data-action="discover">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z" fill="currentColor"/></svg>Discover</button>
           <button type="button" class="dock__btn" data-action="walk" title="Walk the streets">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="13" cy="4" r="2" fill="currentColor"/><path d="M11 21l1.5-6-2.5-2 1-5 3 3h3M10 8l-3 2-1 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Walk</button>
+          <button type="button" class="dock__btn dock__btn--icon" data-action="perform" aria-label="Busk on a street corner" title="Perform: busk on a street corner">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 013 3v5a3 3 0 01-6 0V6a3 3 0 013-3zM6 11a6 6 0 0012 0M12 17v4M8 21h8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+          <button type="button" id="viz-btn" class="dock__btn dock__btn--icon" data-action="visualiser" aria-label="Sound visualiser" aria-pressed="false" title="Visualiser: the skyline moves to the music">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V12M8 20V6M12 20V10M16 20V4M20 20V14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>
           <button type="button" class="dock__btn dock__btn--icon" data-action="overview" aria-label="Back to overview" title="Overview">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>
         </nav>
@@ -111,12 +116,17 @@
 
         <div id="gig" class="panel gig" hidden></div>
 
+        <div id="tour" class="panel tour" hidden></div>
+
+        <div id="perform" class="panel perform" hidden></div>
+
         <div id="walk-hud" class="walk-hud" hidden>
           <div class="walk-hud__top">
             <span class="walk-hud__title">Walking</span>
             <span class="walk-hud__keys">WASD / arrows to move · drag to look · Shift to run</span>
             <button type="button" class="btn btn--ghost btn--sm" data-action="exit-walk">Exit (Esc)</button>
           </div>
+          <div id="walk-street" class="walk-street" hidden></div>
           <div id="walk-now" class="panel walk-now" hidden></div>
           <div id="walk-stick" class="walk-stick" aria-hidden="true"><i></i></div>
         </div>
