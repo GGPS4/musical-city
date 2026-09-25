@@ -155,6 +155,25 @@ export class MusicService {
   private remoteHealthy = true;
 
   /**
+   * Songs from every artist at a place, interleaved (A1, B1, C1, A2, B2…) so
+   * each act gets heard rather than only the first one listed.
+   */
+  async tracksForArtists(artists: Artist[], perArtist = 2): Promise<TrackResult> {
+    const results = await Promise.all(artists.map((a) => this.tracksFor(a)));
+    const lists = results.map((r, i) => {
+      const withPreview = r.tracks.filter((t) => t.previewUrl).slice(0, perArtist);
+      return withPreview.length ? withPreview : r.tracks.slice(0, 1).map((t) => ({ ...t, artist: t.artist || artists[i].name }));
+    });
+    const tracks: Track[] = [];
+    for (let round = 0; round < perArtist; round++) for (const l of lists) if (l[round]) tracks.push(l[round]);
+    return {
+      tracks,
+      source: results.find((r) => !r.degraded)?.source ?? results[0]?.source ?? 'Curated catalogue',
+      degraded: results.length > 0 && results.every((r) => r.degraded),
+    };
+  }
+
+  /**
    * Specific songs (e.g. a landmark's soundtrack), in order. Songs the preview
    * service can't find still appear, linking out to streaming services.
    */
@@ -228,6 +247,8 @@ export class PreviewPlayer {
   private audio = new Audio();
   private listeners = new Set<(s: PlayerState) => void>();
   private state: PlayerState = { status: 'idle' };
+  /** Tracks that play one after another (e.g. every act at a venue). */
+  private queue: Track[] = [];
 
   constructor() {
     this.audio.preload = 'none';
@@ -235,20 +256,60 @@ export class PreviewPlayer {
     this.audio.addEventListener('timeupdate', () => this.progress());
     this.audio.addEventListener('playing', () => this.update('playing'));
     this.audio.addEventListener('pause', () => this.update('paused'));
-    this.audio.addEventListener('ended', () => this.update('paused', 1));
+    this.audio.addEventListener('ended', () => {
+      this.update('paused', 1);
+      if (!this.next()) this.queue = [];
+    });
     this.audio.addEventListener('error', () => this.stop());
   }
 
+  /** Plays a list in order, starting at `start`, skipping tracks without previews. */
+  playQueue(tracks: Track[], start = 0): void {
+    this.queue = tracks.filter((t) => t.previewUrl);
+    const first = tracks[start]?.previewUrl ? tracks[start] : this.queue[0];
+    if (first) this.load(first);
+  }
+
+  /** Skips to the next track in the queue. Returns false at the end. */
+  next(): boolean {
+    const i = this.queue.findIndex((t) => this.state.status !== 'idle' && t.previewUrl === this.state.track.previewUrl);
+    const nextTrack = this.queue[i + 1];
+    if (!nextTrack) return false;
+    this.load(nextTrack);
+    return true;
+  }
+
+  get hasNext(): boolean {
+    const i = this.queue.findIndex((t) => this.state.status !== 'idle' && t.previewUrl === this.state.track.previewUrl);
+    return i >= 0 && i < this.queue.length - 1;
+  }
+
+  /** Plays one track. If it belongs to the current queue, the queue carries on after it. */
   play(track: Track): void {
     if (!track.previewUrl) return;
+    if (!this.queue.some((t) => t.previewUrl === track.previewUrl)) this.queue = [];
     if (this.state.status !== 'idle' && this.state.track.previewUrl === track.previewUrl) {
       this.toggle();
       return;
     }
+    this.load(track);
+  }
+
+  private load(track: Track): void {
+    if (!track.previewUrl) return;
     this.audio.src = track.previewUrl;
     this.state = { status: 'loading', track, progress: 0 };
     this.emit();
     this.audio.play().catch(() => this.stop());
+  }
+
+  /** 0–1, used to fade music in and out while walking. */
+  setVolume(v: number): void {
+    this.audio.volume = Math.max(0, Math.min(1, v));
+  }
+
+  get current(): Track | null {
+    return this.state.status === 'idle' ? null : this.state.track;
   }
 
   toggle(): void {
@@ -258,6 +319,7 @@ export class PreviewPlayer {
   }
 
   stop(): void {
+    this.queue = [];
     this.audio.pause();
     this.audio.removeAttribute('src');
     this.state = { status: 'idle' };
