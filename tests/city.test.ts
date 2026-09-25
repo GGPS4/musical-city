@@ -21,6 +21,9 @@ test('catalogue relationships and landmark artists all resolve', () => {
   for (const l of HISTORICAL_LANDMARKS) {
     for (const id of l.artistIds) assert.ok(ARTIST_BY_ID[id], `${l.id} → unknown artist ${id}`);
     assert.ok(l.date && l.place && l.description, `${l.id} needs date, place and description`);
+    assert.ok(l.soundtrack.songs.length >= 2, `${l.id} needs a soundtrack`);
+    for (const s of l.soundtrack.songs) assert.ok(ARTIST_BY_ID[s.artistId], `${l.id} soundtrack → unknown artist ${s.artistId}`);
+    if (l.soundtrack.album) assert.ok(ARTIST_BY_ID[l.soundtrack.album.artistId]);
   }
   for (const g of GENRE_IDS) for (const r of GENRES[g].relatedGenres) assert.ok(GENRES[r]);
 });
@@ -102,4 +105,31 @@ test('discovery suggests new artists and can introduce them', () => {
   assert.ok(intro);
   assert.equal(plan.venues.length, before + 1);
   assert.ok(intro.venue.artistIds.includes('gang-of-four'));
+});
+
+test('landmark soundtracks match the event', () => {
+  const byId = Object.fromEntries(HISTORICAL_LANDMARKS.map((l) => [l.id, l]));
+  assert.equal(byId['beatles-abbey-road'].soundtrack.album?.title, 'Abbey Road');
+  assert.equal(byId['beatles-rooftop'].soundtrack.album?.title, 'Let It Be');
+  assert.ok(byId['beatles-rooftop'].soundtrack.songs.some((s) => s.title === 'Get Back'));
+  assert.equal(byId['floyd-battersea'].soundtrack.album?.title, 'Animals');
+  const plan = generateCity(resolveTaste(['The Beatles']));
+  assert.equal(plan.landmarks.find((l) => l.id === 'beatles-rooftop')?.soundtrack?.album?.title, 'Let It Be');
+});
+
+test('rock, indie and punk expansion resolves and builds its own districts', () => {
+  for (const name of ["Guns N' Roses", 'guns n roses', 'Arctic Monkeys', 'Queens of the Stone Age', 'QOTSA', 'AC/DC', 'Green Day', 'The Libertines', 'Oasis']) {
+    assert.equal(matchTerm(name)?.kind, 'artist', name);
+  }
+  assert.equal(matchTerm('Indie')?.id, 'indie');
+  assert.equal(matchTerm('Hard Rock')?.id, 'hard-rock');
+  assert.equal(matchTerm('metal')?.id, 'hard-rock');
+  assert.ok(ARTISTS.length >= 90);
+  const plan = generateCity(resolveTaste(["Guns N' Roses", 'Arctic Monkeys', 'Queens of the Stone Age', 'Indie']));
+  const genres = plan.districts.map((d) => d.genre);
+  assert.ok(genres.includes('hard-rock') && genres.includes('indie'));
+  assert.ok(plan.landmarks.some((l) => l.id === 'gnr-troubadour'));
+  assert.ok(plan.landmarks.some((l) => l.id === 'arctic-grapes'));
+  assert.ok(plan.landmarks.some((l) => l.model === 'flying-v'));
+  assert.ok(plan.landmarks.some((l) => l.model === 'cassette'));
 });
