@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Musical City</title>
+    <meta name="description" content="Your music taste, built as a 3D city you can explore: genre districts, venues, record stores and real music-history landmarks." />
+    <meta name="theme-color" content="#06070f" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%2306070f'/%3E%3Crect x='10' y='30' width='9' height='24' fill='%23ff2e63'/%3E%3Crect x='22' y='18' width='9' height='36' fill='%23ffd27a'/%3E%3Crect x='34' y='24' width='9' height='30' fill='%233ef0ff'/%3E%3Crect x='46' y='36' width='8' height='18' fill='%23c9b6ff'/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app" data-phase="landing">
+      <div id="stage" class="stage"></div>
+      <div id="labels" class="labels" aria-hidden="true"></div>
+
+      <!-- Landing -->
+      <section id="landing" class="landing" hidden>
+        <div class="landing__inner">
+          <p class="eyebrow eyebrow--brand"><span class="logo-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span> Musical City</p>
+          <h1>What does your music taste look like?</h1>
+          <p class="lede">Enter some artists or genres you love and we’ll build your city.</p>
+          <form id="taste-form" class="taste-form" autocomplete="off">
+            <div id="taste-box" class="taste-box">
+              <ul id="chips" class="chips" aria-label="Your selections"></ul>
+              <input id="taste-input" type="text" aria-label="Artists or genres" placeholder="The Beatles, David Bowie, The Clash, Punk, Psychedelic Rock" />
+            </div>
+            <ul id="suggestions" class="suggestions" role="listbox" hidden></ul>
+            <p id="taste-error" class="form-error" role="alert"></p>
+            <button class="btn btn--primary btn--lg" type="submit">Build my city</button>
+          </form>
+          <div class="presets-wrap">
+            <span>Or try</span>
+            <div id="presets" class="presets"></div>
+          </div>
+        </div>
+        <p class="landing__foot">Venues are fictional. Landmarks marked historical are based on documented music history.</p>
+      </section>
+
+      <!-- In-city interface -->
+      <div id="hud" class="hud" hidden>
+        <header class="topbar">
+          <div class="brand">
+            <span class="logo-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+            <div>
+              <strong>Musical City</strong>
+              <small id="city-subtitle"></small>
+            </div>
+          </div>
+          <div class="topbar__actions">
+            <button type="button" class="btn btn--ghost btn--sm" data-action="share">Share</button>
+            <button type="button" class="btn btn--ghost btn--sm" data-action="new-city">New city</button>
+          </div>
+        </header>
+
+        <aside id="dna" class="panel dna" aria-label="Your musical DNA">
+          <button type="button" id="dna-toggle" class="dna__head">
+            <span>Your musical DNA</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+          </button>
+          <ul id="dna-rows" class="dna__rows"></ul>
+          <p class="dna__note">Estimated from your selections</p>
+        </aside>
+
+        <aside id="explorer" class="panel explorer" aria-hidden="true">
+          <div class="explorer__head">
+            <h2 id="explorer-title">Venues</h2>
+            <button type="button" class="icon-btn" data-action="close-list" aria-label="Close list"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg></button>
+          </div>
+          <ul id="explorer-list" class="explorer__list"></ul>
+        </aside>
+
+        <aside id="info" class="panel info" aria-live="polite" aria-hidden="true"></aside>
+
+        <nav class="dock" aria-label="Explore the city">
+          <button type="button" class="dock__btn" data-action="tab" data-tab="districts" aria-pressed="false">Districts</button>
+          <button type="button" class="dock__btn" data-action="tab" data-tab="venues" aria-pressed="false">Venues</button>
+          <button type="button" class="dock__btn" data-action="tab" data-tab="landmarks" aria-pressed="false">Landmarks</button>
+          <button type="button" class="dock__btn" data-action="tab" data-tab="artists" aria-pressed="false">Artists</button>
+          <span class="dock__sep" aria-hidden="true"></span>
+          <button type="button" class="dock__btn dock__btn--discover" data-action="discover">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z" fill="currentColor"/></svg>Discover</button>
+          <button type="button" class="dock__btn dock__btn--icon" data-action="overview" aria-label="Back to overview" title="Overview">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>
+        </nav>
+
+        <div id="player" class="panel player" hidden></div>
+
+        <div id="build" class="build" hidden>
+          <p class="build__title">Building your city…</p>
+          <p id="build-step" class="build__step"></p>
+          <span class="build__track"><i id="build-bar"></i></span>
+          <button type="button" class="btn btn--ghost btn--sm" data-action="skip">Skip</button>
+        </div>
+
+        <p id="hint" class="hint">Drag to orbit · Scroll or pinch to zoom · Right-drag or two fingers to pan · Click the glowing markers</p>
+      </div>
+
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+      <div id="fatal" class="fatal" hidden>
+        <h1>Musical City needs WebGL</h1>
+        <p>Your browser or device doesn’t support 3D graphics (WebGL), so we can’t build your city here. Try a recent version of Chrome, Firefox, Safari or Edge.</p>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
