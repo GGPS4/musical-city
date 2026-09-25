@@ -4,6 +4,9 @@ import { locationsFor, venueTypeLabel } from '../core/cityGenerator.js';
 import { hashString, mulberry32 } from '../core/random.js';
 import { discoveryChain, neighbours } from '../core/recommend.js';
 import type { Tab } from '../core/store.js';
+import { SCENES, type Passport } from '../core/passport.js';
+import { ownerLabel, type Comparison } from '../core/compare.js';
+import { HISTORICAL_LANDMARKS } from '../data/landmarks.js';
 import type { Track, PlayerState } from '../music/musicService.js';
 import { streamingLinks } from '../music/musicService.js';
 import type { Archetype, Artist, CityPlan, GenreId, Selection } from '../types.js';
@@ -13,7 +16,9 @@ export interface HudActions {
   select(sel: Selection, opts?: { fly?: boolean }): void;
   listen(artistId: string): void;
   listenLandmark(landmarkId: string): void;
-  playTrack(track: Track): void;
+  listenAll(key: string, artistIds: string[]): void;
+  nextTrack(): void;
+  playTrack(track: Track, queue?: Track[]): void;
   togglePlayer(): void;
   stopPlayer(): void;
   addArtist(artistId: string, fromId?: string): void;
@@ -24,6 +29,13 @@ export interface HudActions {
   skip(): void;
   setTab(tab: Tab): void;
   toggleList(open?: boolean): void;
+  startGig(kind: 'venue' | 'landmark', id: string): void;
+  nextAct(): void;
+  endGig(): void;
+  walk(kind?: 'venue' | 'landmark', id?: string): void;
+  exitWalk(): void;
+  openCompare(): void;
+  openPoster(): void;
 }
 
 const ARCHETYPE_LABEL: Record<Archetype, string> = {
@@ -61,6 +73,10 @@ export class Hud {
   private build = $('#build');
   private trackCache = new Map<string, { tracks: Track[]; degraded: boolean; source: string } | 'loading'>();
   private currentSel: Selection = null;
+  passport: Passport | null = null;
+  /** Set by the app so the player bar knows whether a next song is queued. */
+  hasNext: () => boolean = () => false;
+  compare: Comparison | null = null;
   private playerState: PlayerState = { status: 'idle' };
 
   constructor(private root: HTMLElement, private actions: HudActions) {
@@ -87,11 +103,15 @@ export class Hud {
         return this.actions.select({ kind: 'district', genre: d.genre as GenreId }, { fly: true });
       case 'listen':
         return this.actions.listen(d.id ?? '');
+      case 'listen-all':
+        return this.actions.listenAll(d.key ?? '', (d.ids ?? '').split(',').filter(Boolean));
+      case 'player-next':
+        return this.actions.nextTrack();
       case 'listen-landmark':
         return this.actions.listenLandmark(d.id ?? '');
       case 'play': {
         const tracks = this.trackCache.get(d.artist ?? '');
-        if (tracks && tracks !== 'loading') this.actions.playTrack(tracks.tracks[Number(d.index)]);
+        if (tracks && tracks !== 'loading') this.actions.playTrack(tracks.tracks[Number(d.index)], tracks.tracks);
         return;
       }
       case 'add-artist':
@@ -116,6 +136,20 @@ export class Hud {
         return this.actions.togglePlayer();
       case 'player-stop':
         return this.actions.stopPlayer();
+      case 'gig':
+        return this.actions.startGig(d.kind as 'venue' | 'landmark', d.id ?? '');
+      case 'gig-next':
+        return this.actions.nextAct();
+      case 'gig-end':
+        return this.actions.endGig();
+      case 'walk':
+        return this.actions.walk(d.kind as 'venue' | 'landmark' | undefined, d.id);
+      case 'exit-walk':
+        return this.actions.exitWalk();
+      case 'open-compare':
+        return this.actions.openCompare();
+      case 'open-poster':
+        return this.actions.openPoster();
       case 'explore-artists': {
         const first = this.info.querySelector<HTMLElement>('.artist-list');
         first?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -142,6 +176,31 @@ export class Hud {
   renderDna(): void {
     const plan = this.plan;
     if (!plan) return;
+    const c = this.compare;
+    this.dna.classList.toggle('is-compare', !!c);
+    $('#dna-toggle span').textContent = c ? `Taste overlap · ${c.score}%` : 'Your musical DNA';
+    if (c) {
+      const genres = [...new Set([...c.youDna, ...c.themDna].filter((d) => d.genre !== 'other').sort((a, b) => b.weight - a.weight).map((d) => d.genre))].slice(0, 6);
+      const pct = (list: typeof c.youDna, g: string) => list.find((d) => d.genre === g)?.percent ?? 0;
+      $('#dna-rows').innerHTML =
+        `<li class="cmp-legend"><span><i class="cmp-you"></i>${esc(c.youName)}</span><span><i class="cmp-them"></i>${esc(c.themName)}</span></li>` +
+        genres
+          .map((g) => {
+            const a = pct(c.youDna, g);
+            const b = pct(c.themDna, g);
+            const id = g as GenreId;
+            return `<li><button type="button" data-action="district" data-genre="${g}" class="dna-row">
+              <span class="dna-name">${esc(genreName(id))}${c.owners[id] === 'shared' ? ' <em class="cmp-shared">shared</em>' : ''}</span>
+              <span class="dna-pct">${a}% · ${b}%</span>
+              <span class="dna-bar dna-bar--split"><i class="cmp-you" style="width:${Math.max(2, a)}%"></i></span>
+              <span class="dna-bar dna-bar--split"><i class="cmp-them" style="width:${Math.max(2, b)}%"></i></span>
+            </button></li>`;
+          })
+          .join('') +
+        (c.sharedArtists.length ? `<li class="cmp-note">You both love ${c.sharedArtists.map((a) => esc(a.name)).join(', ')}.</li>` : '') +
+        (c.bridges.length ? `<li class="cmp-note">Meet at ${c.bridges.slice(0, 2).map((b) => `<button type="button" class="linkish" data-action="artist" data-id="${b.artist.id}">${esc(b.artist.name)}</button> (${esc(b.yours.name)} ↔ ${esc(b.theirs.name)})`).join(', ')}.</li>` : '');
+      return;
+    }
     const rows = plan.dna.slice(0, 6);
     const other = plan.dna.slice(6).reduce((s, d) => s + d.percent, 0);
     const all = other ? [...rows, { genre: 'other' as const, weight: 0, percent: other }] : rows;
@@ -177,7 +236,7 @@ export class Hud {
           const pct = plan.dna.find((x) => x.genre === d.genre)?.percent ?? 0;
           return `<li><button type="button" class="row" data-action="district" data-genre="${d.genre}">
             <span class="dot" style="background:${GENRES[d.genre].style.neon[0]}"></span>
-            <span class="row__main"><strong>${esc(d.name)}</strong><small>${esc(d.nickname)}</small></span>
+            <span class="row__main"><strong>${esc(d.name)}</strong><small>${esc(this.compare ? ownerLabel(this.compare, d.genre) : d.nickname)}</small></span>
             <span class="row__meta">${pct}%</span></button></li>`;
         })
         .join('');
@@ -200,16 +259,30 @@ export class Hud {
         hist.map((l) => `<li><button type="button" class="row" data-action="landmark" data-id="${l.id}"><span class="badge badge--hist">Hist</span><span class="row__main"><strong>${esc(l.name)}</strong><small>${esc(l.place ?? '')} · ${esc(l.date ?? '')}</small></span></button></li>`).join('') +
         `<li class="row-head">Musical interpretations</li>` +
         insp.map((l) => `<li><button type="button" class="row" data-action="landmark" data-id="${l.id}"><span class="badge badge--insp">Interp</span><span class="row__main"><strong>${esc(l.name)}</strong><small>${esc(GENRES[l.genres[0]].name)} District monument</small></span></button></li>`).join('');
+    } else if (tab === 'passport') {
+      body = this.passportHtml();
     } else {
       const users = plan.artists.filter((a) => plan.userArtistIds.includes(a.id) || a.custom);
       const others = plan.artists.filter((a) => !plan.userArtistIds.includes(a.id) && !a.custom);
       const row = (a: Artist) => `<li><button type="button" class="row" data-action="artist" data-id="${a.id}">
         <span class="dot" style="background:${a.genres[0] ? GENRES[a.genres[0]].style.neon[0] : '#8e8ca6'}"></span>
         <span class="row__main"><strong>${esc(a.name)}</strong><small>${a.genres.length ? a.genres.map((g) => esc(GENRES[g].name)).join(' · ') : 'Your pick'}</small></span></button></li>`;
-      body = (users.length ? `<li class="row-head">Your artists</li>${users.map(row).join('')}` : '') + `<li class="row-head">Also in town</li>${others.map(row).join('')}`;
+      const c = this.compare;
+      if (c) {
+        const both = users.filter((a) => c.youArtistIds.includes(a.id) && c.themArtistIds.includes(a.id));
+        const yours = users.filter((a) => c.youArtistIds.includes(a.id) && !c.themArtistIds.includes(a.id));
+        const theirs = users.filter((a) => c.themArtistIds.includes(a.id) && !c.youArtistIds.includes(a.id));
+        body =
+          (both.length ? `<li class="row-head">Both of you</li>${both.map(row).join('')}` : '') +
+          (yours.length ? `<li class="row-head">${esc(c.youName)}</li>${yours.map(row).join('')}` : '') +
+          (theirs.length ? `<li class="row-head">${esc(c.themName)}</li>${theirs.map(row).join('')}` : '') +
+          `<li class="row-head">Also in town</li>${others.map(row).join('')}`;
+      } else {
+        body = (users.length ? `<li class="row-head">Your artists</li>${users.map(row).join('')}` : '') + `<li class="row-head">Also in town</li>${others.map(row).join('')}`;
+      }
     }
     $('#explorer-list').innerHTML = body;
-    $('#explorer-title').textContent = cap(tab);
+    $('#explorer-title').textContent = tab === 'passport' ? 'Landmark passport' : cap(tab);
   }
 
   /* ---------------- build overlay ---------------- */
@@ -217,6 +290,10 @@ export class Hud {
   showBuild(show: boolean): void {
     this.build.hidden = !show;
     this.root.classList.toggle('is-building', show);
+  }
+
+  buildStatus(text: string): void {
+    $('#build-step').textContent = text;
   }
 
   buildProgress(t: number, total: number): void {
@@ -229,6 +306,10 @@ export class Hud {
   }
 
   /* ---------------- info panel ---------------- */
+
+  refreshInfo(): void {
+    this.renderInfo(this.currentSel);
+  }
 
   renderInfo(sel: Selection): void {
     this.currentSel = sel;
@@ -258,13 +339,14 @@ export class Hud {
       .join('')}</ul></div>`;
   }
 
-  private listenBlock(artistIds: string[]): string {
-    const first = artistIds.find((id) => ARTIST_BY_ID[id]);
-    if (!first) return '';
-    const cached = this.trackCache.get(first);
-    const btn = `<button type="button" class="btn btn--primary btn--sm" data-action="listen" data-id="${first}">${ICONS.play} Listen</button>`;
-    return `<div class="info__actions">${btn}${artistIds.length > 1 ? `<button type="button" class="btn btn--ghost btn--sm" data-action="explore-artists">Explore artists</button>` : ''}</div>
-      <div class="tracks" data-tracks-for="${first}">${cached ? this.tracksHtml(first) : ''}</div>`;
+  /** Listen button for a place with one or more artists; loads songs from all of them. */
+  private listenBlock(artistIds: string[], key: string): string {
+    const ids = artistIds.filter((id) => ARTIST_BY_ID[id] || this.plan?.artists.some((a) => a.id === id && !a.custom));
+    if (!ids.length) return '';
+    const label = ids.length > 1 ? `Listen to all ${ids.length} artists` : 'Listen';
+    const btn = `<button type="button" class="btn btn--primary btn--sm" data-action="listen-all" data-key="${esc(key)}" data-ids="${esc(ids.join(','))}">${ICONS.play} ${label}</button>`;
+    return `<div class="info__actions">${btn}${ids.length > 1 ? `<button type="button" class="btn btn--ghost btn--sm" data-action="explore-artists">Explore artists</button>` : ''}</div>
+      <div class="tracks" data-tracks-for="${esc(key)}">${this.trackCache.has(key) ? this.tracksHtml(key) : ''}</div>`;
   }
 
   private venueHtml(id: string): string {
@@ -279,12 +361,12 @@ export class Hud {
         const chain = discoveryChain(seedArtist, inCity, 3, mulberry32(hashString(v.id)));
         if (chain.length) {
           extra = `<div class="info__section"><h4>You might also like</h4><ol class="chain">
-            <li><button type="button" class="chain__item" data-action="artist" data-id="${seedArtist.id}"><strong>${esc(seedArtist.name)}</strong><small>${esc(seedArtist.album.title)} (${seedArtist.album.year})</small></button></li>
+            <li><button type="button" class="chain__item" data-action="artist" data-id="${seedArtist.id}"><strong>${esc(seedArtist.name)}</strong><small>${seedArtist.album.title ? `${esc(seedArtist.album.title)} (${seedArtist.album.year})` : esc(seedArtist.origin)}</small></button></li>
             ${chain
               .map((a, i) => {
                 const present = plan.venues.some((x) => x.addedBy === a.id);
                 return `<li class="chain__arrow">${ICONS.arrow}</li><li><div class="chain__item">
-                  <button type="button" class="chain__name" data-action="artist" data-id="${a.id}"><strong>${esc(a.name)}</strong><small>${esc(a.album.title)} (${a.album.year})</small></button>
+                  <button type="button" class="chain__name" data-action="artist" data-id="${a.id}"><strong>${esc(a.name)}</strong><small>${a.album.title ? `${esc(a.album.title)} (${a.album.year})` : esc(a.origin)}</small></button>
                   ${present ? '<span class="badge badge--new">In town</span>' : `<button type="button" class="btn btn--ghost btn--xs" data-action="add-artist" data-id="${a.id}" data-from="${(i ? chain[i - 1] : seedArtist).id}">+ Add to city</button>`}
                 </div></li>`;
               })
@@ -299,7 +381,11 @@ export class Hud {
       <div class="info__section"><h4>Genre</h4><div class="tags">${v.genres.map(genreChip).join('')}</div></div>
       ${this.artistsList(v.artistIds)}
       <p class="info__desc">${esc(v.description)}</p>
-      ${this.listenBlock(v.artistIds)}
+      ${this.listenBlock(v.artistIds, `venue:${v.id}`)}
+      <div class="info__actions info__actions--secondary">
+        <button type="button" class="btn btn--gold btn--sm" data-action="gig" data-kind="venue" data-id="${v.id}">Gig night</button>
+        <button type="button" class="btn btn--ghost btn--sm" data-action="walk" data-kind="venue" data-id="${v.id}">Walk here</button>
+      </div>
       ${extra}`;
   }
 
@@ -313,7 +399,12 @@ export class Hud {
         <p class="info__meta">${esc(l.place ?? '')}<br>${esc(l.date ?? '')}</p>
         <p class="info__desc">${esc(l.description)}</p>
         <p class="info__note">The event is documented music history. The building you see is a miniature inspired by it, not a replica.</p>
+        ${this.stampHtml(l.id)}
         ${this.soundtrackBlock(l.id)}
+        <div class="info__actions info__actions--secondary">
+          <button type="button" class="btn btn--gold btn--sm" data-action="gig" data-kind="landmark" data-id="${l.id}">Gig night + fireworks</button>
+          <button type="button" class="btn btn--ghost btn--sm" data-action="walk" data-kind="landmark" data-id="${l.id}">Walk here</button>
+        </div>
         ${this.artistsList(l.artistIds)}`;
     }
     const g = l.genres[0];
@@ -322,7 +413,80 @@ export class Hud {
       <p class="info__meta">Monument of the ${esc(GENRES[g].name)} District</p>
       <p class="info__desc">${esc(l.description)}</p>
       <p class="info__note">A fictional monument generated from ${esc(GENRES[g].scene)}.</p>
+      <div class="info__actions info__actions--secondary">
+        <button type="button" class="btn btn--gold btn--sm" data-action="gig" data-kind="landmark" data-id="${l.id}">Gig night + fireworks</button>
+        <button type="button" class="btn btn--ghost btn--sm" data-action="walk" data-kind="landmark" data-id="${l.id}">Walk here</button>
+      </div>
       <div class="info__section"><h4>District</h4><div class="tags">${genreChip(g)}</div></div>`;
+  }
+
+  private passportHtml(): string {
+    const pp = this.passport;
+    const plan = this.plan;
+    if (!pp || !plan) return '';
+    const inCity = new Set(plan.landmarks.map((l) => l.id));
+    const stamp = (id: string) => {
+      const l = HISTORICAL_LANDMARKS.find((x) => x.id === id);
+      if (!l) return '';
+      const st = pp.get(id);
+      const here = inCity.has(id);
+      const who = ARTIST_BY_ID[l.artistIds[0]]?.name ?? '';
+      const sub = st ? `Stamped ${new Date(st.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}` : here ? 'In your city · play its soundtrack to stamp' : `Add ${who} to find it`;
+      const inner = `<span class="stamp__seal" aria-hidden="true">${st ? '✓' : here ? '♪' : '·'}</span><span class="row__main"><strong>${esc(l.name)}</strong><small>${esc(sub)}</small></span>`;
+      return here
+        ? `<li><button type="button" class="row stamp ${st ? 'is-stamped' : 'is-here'}" data-action="landmark" data-id="${id}">${inner}</button></li>`
+        : `<li><div class="row stamp ${st ? 'is-stamped' : 'is-locked'}">${inner}</div></li>`;
+    };
+    const scenes = SCENES.map((sc) => {
+      const got = pp.sceneProgress(sc);
+      const done = got === sc.landmarkIds.length;
+      return `<li class="row-head scene-head ${done ? 'is-done' : ''}"><span>${done ? '★ ' : ''}${esc(sc.name)}</span><span>${got}/${sc.landmarkIds.length}</span></li>
+        <li class="scene-desc">${esc(sc.description)}</li>
+        ${sc.landmarkIds.map(stamp).join('')}`;
+    }).join('');
+    return `<li class="passport-summary"><strong>${pp.count}</strong> of ${pp.total} stamps · ${SCENES.filter((sc) => pp.sceneDone(sc)).length} of ${SCENES.length} scenes complete
+      <span class="passport-bar"><i style="width:${(pp.count / pp.total) * 100}%"></i></span>
+      <small>Open a historical landmark and play its soundtrack to collect its stamp. Stamps are saved in this browser.</small></li>${scenes}`;
+  }
+
+  /** Floating card for an ongoing gig night. */
+  renderGig(g: { title: string; place: string; lineup: string[]; act: number; fireworks: boolean } | null): void {
+    const el = $('#gig');
+    if (!g) {
+      el.hidden = true;
+      this.root.classList.remove('is-gig');
+      return;
+    }
+    this.root.classList.add('is-gig');
+    el.hidden = false;
+    el.innerHTML = `<span class="gig__live"><i></i>Live tonight</span>
+      <div class="gig__main"><strong>${esc(g.title)}</strong><small>${esc(g.place)}</small></div>
+      <ol class="gig__lineup">${g.lineup.map((n, i) => `<li class="${i === g.act ? 'is-on' : ''}">${i === g.act ? '▶ ' : ''}${esc(n)}</li>`).join('')}</ol>
+      <div class="gig__actions">
+        ${g.lineup.length > 1 ? '<button type="button" class="btn btn--ghost btn--xs" data-action="gig-next">Next act</button>' : ''}
+        <button type="button" class="btn btn--ghost btn--xs" data-action="gig-end">End show</button>
+      </div>`;
+  }
+
+  /** Walking HUD: what's playing nearby and any landmark close by. */
+  renderWalk(active: boolean, now?: { venue?: string; artist?: string; distance?: number; landmark?: { id: string; name: string } | null }): void {
+    $('#walk-hud').hidden = !active;
+    this.root.classList.toggle('is-walking', active);
+    const el = $('#walk-now');
+    if (!active || !now || (!now.venue && !now.landmark)) {
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
+    el.innerHTML = `${now.venue ? `<div class="walk-now__row"><span class="walk-now__eq" aria-hidden="true"><i></i><i></i><i></i></span><div><strong>${esc(now.artist ?? '')}</strong><small>from ${esc(now.venue)}${now.distance !== undefined ? ` · ${Math.round(now.distance)} m away` : ''}</small></div></div>` : ''}
+      ${now.landmark ? `<button type="button" class="walk-now__lm" data-action="landmark" data-id="${esc(now.landmark.id)}">★ ${esc(now.landmark.name)} is here · open</button>` : ''}`;
+  }
+
+  private stampHtml(id: string): string {
+    const st = this.passport?.get(id);
+    return st
+      ? `<p class="stamp-note is-stamped">✓ Passport stamped ${esc(new Date(st.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }))}</p>`
+      : '<p class="stamp-note">Play the soundtrack to stamp your passport.</p>';
   }
 
   /** The album/songs tied to a historical landmark. */
@@ -331,11 +495,12 @@ export class Hud {
     const st = l?.soundtrack;
     if (!st) return '';
     const name = (aid: string) => ARTIST_BY_ID[aid]?.name ?? '';
+    const songBy = (s: { artistId?: string; artistName?: string }) => (s.artistId ? name(s.artistId) : s.artistName ?? '');
     const key = `lm:${id}`;
-    const multi = new Set(st.songs.map((s) => s.artistId)).size > 1;
+    const multi = new Set(st.songs.map(songBy)).size > 1;
     return `<div class="info__section soundtrack"><h4>Soundtrack</h4>
       ${st.album ? `<p class="album"><strong>${esc(st.album.title)}</strong> (${st.album.year}) · ${esc(name(st.album.artistId))}</p>` : ''}
-      <p class="songs">${st.songs.map((s) => esc(s.title) + (multi ? ` <span class="songs__by">(${esc(name(s.artistId))})</span>` : '')).join(' · ')}</p>
+      <p class="songs">${st.songs.map((s) => esc(s.title) + (multi ? ` <span class="songs__by">(${esc(songBy(s))})</span>` : '')).join(' · ')}</p>
       <p class="soundtrack__note">${esc(st.note)}</p>
       <div class="info__actions"><button type="button" class="btn btn--primary btn--sm" data-action="listen-landmark" data-id="${esc(id)}">${ICONS.play} Play the soundtrack</button></div>
       <div class="tracks" data-tracks-for="${esc(key)}">${this.trackCache.has(key) ? this.tracksHtml(key) : ''}</div>
@@ -361,8 +526,8 @@ export class Hud {
       <p class="info__meta">${esc(a.origin)} · since ${a.since}</p>
       <div class="tags">${a.genres.map(genreChip).join('')}</div>
       <p class="info__desc">${esc(a.blurb)}</p>
-      <div class="info__section"><h4>Essential</h4><p class="album"><strong>${esc(a.album.title)}</strong> (${a.album.year})</p>
-        <p class="songs">${a.songs.map((s) => esc(s.title)).join(' · ')}</p></div>
+      ${a.album.title || a.songs.length ? `<div class="info__section"><h4>Essential</h4>${a.album.title ? `<p class="album"><strong>${esc(a.album.title)}</strong> (${a.album.year})</p>` : ''}
+        <p class="songs">${a.songs.map((s) => esc(s.title)).join(' · ')}</p></div>` : ''}
       <div class="info__actions">
         <button type="button" class="btn btn--primary btn--sm" data-action="listen" data-id="${a.id}">${ICONS.play} Listen</button>
         ${!inCity || !places.length ? `<button type="button" class="btn btn--gold btn--sm" data-action="add-artist" data-id="${a.id}">${ICONS.spark} Add to my city</button>` : ''}
@@ -421,17 +586,16 @@ export class Hud {
     if (!v) return '';
     if (v === 'loading') return '<p class="tracks__loading">Finding recordings…</p>';
     const playing = this.playerState.status !== 'idle' ? this.playerState.track.previewUrl : null;
-    const soundtrack = key.startsWith('lm:');
     const rows = v.tracks
       .map((t, i) => {
-        const sub = soundtrack ? t.artist : t.album ?? '';
+        const sub = t.artist;
         return t.previewUrl
           ? `<li><button type="button" class="track ${playing === t.previewUrl ? 'is-playing' : ''}" data-action="play" data-artist="${esc(key)}" data-index="${i}">
               ${t.artworkUrl ? `<img src="${esc(t.artworkUrl)}" alt="" loading="lazy">` : '<span class="track__art"></span>'}
               <span class="track__main"><strong>${esc(t.title)}</strong><small>${esc(sub)}</small></span>
               <span class="track__icon">${playing === t.previewUrl && this.playerState.status === 'playing' ? ICONS.pause : ICONS.play}</span></button></li>`
           : `<li><a class="track" href="${esc(t.externalUrl ?? searchUrl(t.artist, t.title))}" target="_blank" rel="noopener">
-              <span class="track__art"></span><span class="track__main"><strong>${esc(t.title)}</strong><small>${esc(soundtrack ? `${t.artist} · open in Spotify` : 'Open in Spotify')}</small></span><span class="track__icon">${ICONS.ext}</span></a></li>`;
+              <span class="track__art"></span><span class="track__main"><strong>${esc(t.title)}</strong><small>${esc(`${t.artist} · open in Spotify`)}</small></span><span class="track__icon">${ICONS.ext}</span></a></li>`;
       })
       .join('');
     return `<ul class="track-list">${rows}</ul>
@@ -459,6 +623,7 @@ export class Hud {
         <div class="player__main"><strong>${esc(s.track.title)}</strong><small>${esc(s.track.artist)}${s.status === 'loading' ? ' · loading…' : ''}</small>
           <span class="player__bar"><i style="width:${(s.progress * 100).toFixed(1)}%"></i></span></div>
         <button type="button" class="icon-btn" data-action="player-toggle" aria-label="${s.status === 'playing' ? 'Pause' : 'Play'}">${s.status === 'playing' ? ICONS.pause : ICONS.play}</button>
+        ${this.hasNext() ? `<button type="button" class="icon-btn" data-action="player-next" aria-label="Next song">${ICONS.next}</button>` : ''}
         ${s.track.externalUrl ? `<a class="icon-btn" href="${esc(s.track.externalUrl)}" target="_blank" rel="noopener" aria-label="Open full track">${ICONS.ext}</a>` : ''}
         <button type="button" class="icon-btn" data-action="player-stop" aria-label="Stop">${ICONS.close}</button>`;
     }

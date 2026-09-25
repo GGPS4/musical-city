@@ -9,6 +9,11 @@ const PRESETS: { label: string; inputs: string[] }[] = [
   { label: 'Indie 2004', inputs: ['Arctic Monkeys', 'The Strokes', 'The Libertines', 'Franz Ferdinand', 'Indie'] },
   { label: 'Desert & grunge', inputs: ['Queens of the Stone Age', 'Kyuss', 'Nirvana', 'Soundgarden', 'Foo Fighters'] },
   { label: '90s punk', inputs: ['Green Day', 'Blink-182', 'The Offspring', 'Rancid', 'Punk'] },
+  { label: 'Golden age hip hop', inputs: ['A Tribe Called Quest', 'Nas', 'Wu-Tang Clan', 'The Notorious B.I.G.', 'Hip Hop'] },
+  { label: 'Blue in green', inputs: ['Miles Davis', 'John Coltrane', 'Thelonious Monk', 'Nina Simone', 'Jazz'] },
+  { label: 'Motown & Stax', inputs: ['Marvin Gaye', 'Aretha Franklin', 'Otis Redding', 'Stevie Wonder', 'Soul'] },
+  { label: 'Kingston', inputs: ['Bob Marley', 'Peter Tosh', 'Toots and the Maytals', 'Lee Scratch Perry', 'Reggae'] },
+  { label: 'Heavy metal', inputs: ['Black Sabbath', 'Iron Maiden', 'Metallica', 'Judas Priest', 'Metal'] },
   { label: 'Manchester nights', inputs: ['Joy Division', 'New Order', 'The Smiths', 'Oasis', 'The Stone Roses'] },
   { label: 'CBGB, 1977', inputs: ['Ramones', 'Talking Heads', 'Television', 'Patti Smith', 'Blondie'] },
 ];
