@@ -1,12 +1,16 @@
 import { ARTISTS, ARTIST_BY_ID } from '../data/artists.js';
 import { GENRES } from '../data/genres.js';
 import { HISTORICAL_LANDMARKS } from '../data/landmarks.js';
+import { RECORD_LABELS } from '../data/labels.js';
 import type {
   Archetype,
   Artist,
   Block,
   BridgePlan,
   BuildingPlan,
+  BuskerPlan,
+  Instrument,
+  LabelTowerPlan,
   CityPlan,
   Connection,
   District,
@@ -26,10 +30,38 @@ import { hashString, mulberry32, pick, range, shuffle, weighted, type Rng } from
 import { neighbours } from './recommend.js';
 import { customArtist, normalize } from './resolve.js';
 
-export const PITCH = 15;
-export const ROAD = 3.4;
+export const PITCH = 18;
+export const ROAD = 4;
 export const FLOOR = 1.15;
 const BLOCK = PITCH - ROAD;
+
+const STAGE_NAMES = [
+  'Lefty Mae', 'Two-Chord Tom', 'Rosa on the Corner', 'The Subway Kid', 'Nine-Lives Nico', 'Dusty June', 'Busker Bill',
+  'Midnight Marlo', 'Little Echo', 'Penny Whistle Pete', 'Quiet Quincy', 'Ray of the Arcade', 'Ol’ Blue Hat', 'Mavis Loop',
+  'The One-Man Band', 'Kid Reverb', 'Sister Sixstring', 'Lamp-post Lou', 'Doorway Dee', 'Captain Capo', 'Hum & Strum',
+  'The Night Shift Duo', 'Frankie Fuzz', 'Coin-jar Cleo', 'Slow Hand Sam', 'Moonlight Mo', 'Crosswalk Kay', 'Sidewalk Sol',
+];
+
+const INSTRUMENTS: Record<GenreId, Instrument[]> = {
+  punk: ['guitar', 'bass'],
+  'post-punk': ['bass', 'guitar'],
+  'classic-rock': ['guitar'],
+  psychedelic: ['guitar', 'keys'],
+  alternative: ['guitar', 'bass'],
+  glam: ['guitar', 'mic'],
+  garage: ['guitar', 'drums'],
+  electronic: ['keys', 'turntables'],
+  'new-wave': ['keys', 'guitar'],
+  'art-rock': ['violin', 'keys'],
+  'hard-rock': ['guitar'],
+  indie: ['guitar', 'keys'],
+  metal: ['guitar', 'drums'],
+  'hip-hop': ['turntables', 'mic'],
+  jazz: ['sax', 'trumpet'],
+  soul: ['mic', 'keys'],
+  reggae: ['drums', 'guitar'],
+  pop: ['mic', 'keys'],
+};
 
 export interface TasteInput {
   artists: Artist[];
@@ -91,7 +123,7 @@ export function generateCity(taste: TasteInput, seed = seedFor([...taste.artists
   const dna = computeDna(input.artists, input.genres, input.unknown.length);
 
   /* ---------------- districts ---------------- */
-  let districtWeights = dna.filter((d): d is GenreWeight & { genre: GenreId } => d.genre !== 'other').slice(0, 6);
+  let districtWeights = dna.filter((d): d is GenreWeight & { genre: GenreId } => d.genre !== 'other').slice(0, 8);
   if (!districtWeights.length) {
     districtWeights = [
       { genre: 'classic-rock', weight: 0.5, percent: 50 },
@@ -102,7 +134,7 @@ export function generateCity(taste: TasteInput, seed = seedFor([...taste.artists
   const norm = districtWeights.map((d) => ({ genre: d.genre, w: d.weight / wSum }));
 
   const inputCount = input.artists.length + input.genres.length + input.unknown.length;
-  const grid = Math.max(11, Math.min(15, 9 + norm.length + Math.round(inputCount / 2)));
+  const grid = Math.max(19, Math.min(27, 15 + norm.length + Math.round(inputCount / 2)));
   const half = (grid * PITCH) / 2;
 
   const districts: District[] = [];
@@ -144,10 +176,10 @@ export function generateCity(taste: TasteInput, seed = seedFor([...taste.artists
 
   /* ---------------- river ---------------- */
   const vertical = rng() < 0.5;
-  const riverWidth = 11;
+  const riverWidth = 15;
   const offset = range(rng, -0.3, 0.3) * half;
-  const amp = range(rng, 9, 17);
-  const freq = range(rng, 0.018, 0.028);
+  const amp = range(rng, 14, 26);
+  const freq = range(rng, 0.011, 0.018);
   const ph1 = rng() * 6.28;
   const ph2 = rng() * 6.28;
   const riverPts: Vec2[] = [];
@@ -198,7 +230,7 @@ export function generateCity(taste: TasteInput, seed = seedFor([...taste.artists
   const mixed: MixedQuarter[] = [...pairs.entries()]
     .filter(([, bs]) => bs.length >= 3)
     .sort((a, b) => b[1].length - a[1].length)
-    .slice(0, 2)
+    .slice(0, 4)
     .map(([key, bs]) => {
       const [a, b] = key.split('|') as [GenreId, GenreId];
       const center = {
@@ -254,7 +286,7 @@ export function generateCity(taste: TasteInput, seed = seedFor([...taste.artists
     if (l) chosen.push(l);
   }
   const userIds = new Set(input.artists.map((a) => a.id));
-  for (const l of chosen.slice(0, 10)) {
+  for (const l of chosen.slice(0, 18)) {
     const leadId = l.artistIds.find((id) => userIds.has(id)) ?? l.artistIds[0];
     const lead = ARTIST_BY_ID[leadId];
     const d = districtFor(lead?.genres ?? []);
@@ -304,7 +336,7 @@ export function generateCity(taste: TasteInput, seed = seedFor([...taste.artists
   for (const b of usable()) {
     let dens = 0;
     for (const k in b.influence) dens += (b.influence[k as GenreId] ?? 0) * GENRES[k as GenreId].style.density;
-    const n = dens < 1.5 ? (rng() < 0.45 ? 1 : 2) : dens < 2.35 ? 2 : 3;
+    const n = dens < 1.5 ? (rng() < 0.3 ? 1 : 2) : dens < 2.35 ? (rng() < 0.7 ? 2 : 3) : 3;
     const nx = n;
     const nz = n === 1 ? 1 : n === 3 ? (rng() < 0.5 ? 2 : 3) : rng() < 0.3 ? 1 : 2;
     const inner = BLOCK - 1.2;
@@ -330,13 +362,13 @@ export function generateCity(taste: TasteInput, seed = seedFor([...taste.artists
         let archetype = weighted(rng, archWeights) ?? 'apartment';
         if (n === 3 && (archetype === 'curvy' || archetype === 'dome')) archetype = 'townhouse';
         const style = GENRES[g].style;
-        let floors = Math.round(range(rng, style.floors[0], style.floors[1]));
-        if (archetype === 'tower' || archetype === 'neon-tower') floors = Math.max(8, Math.round(floors * 1.5));
+        let floors = Math.round(range(rng, style.floors[0], style.floors[1]) * 1.4);
+        if (archetype === 'tower' || archetype === 'neon-tower') floors = Math.max(12, Math.round(floors * 1.6));
         if (archetype === 'warehouse') floors = Math.min(floors, 2 + Math.floor(rng() * 2));
-        if (archetype === 'townhouse') floors = Math.min(Math.max(floors, 2), 4);
-        if (archetype === 'dome') floors = Math.min(floors, 4);
+        if (archetype === 'townhouse') floors = Math.min(Math.max(floors, 2), 5);
+        if (archetype === 'dome') floors = Math.min(floors, 6);
         const dp = dist(pos, primary.center);
-        const skyline = 1 + 0.7 * Math.exp(-(dp * dp) / (2 * skylineSigma * skylineSigma));
+        const skyline = 1 + 1.1 * Math.exp(-(dp * dp) / (2 * skylineSigma * skylineSigma));
         const tall = archetype === 'tower' || archetype === 'neon-tower' || archetype === 'brutalist' || archetype === 'classic';
         const height = floors * FLOOR * (tall ? skyline : 1) + (archetype === 'warehouse' ? 0.6 : 0);
         const fill = n === 3 ? range(rng, 0.84, 0.96) : range(rng, 0.7, 0.9);
@@ -442,10 +474,11 @@ export function generateCity(taste: TasteInput, seed = seedFor([...taste.artists
 
   for (const d of districts) {
     const g = GENRES[d.genre];
-    const count = Math.max(2, Math.min(6, Math.round(1.6 + d.weight * 9)));
+    const count = Math.max(4, Math.min(11, Math.round(3.5 + d.weight * 16)));
     const types = shuffle(rng, g.style.venueTypes.filter((t) => t !== 'record-store'));
     const order: VenueType[] = [types[0], 'record-store'];
     for (let i = 1; order.length < count; i++) order.push(types[i % types.length]);
+    if (count >= 7) order.push('record-store');
     for (const type of order) {
       const b = claimBuilding(d.center, (x) => {
         const block = blocks.find((k) => k.id === x.blockId);
@@ -480,13 +513,11 @@ export function generateCity(taste: TasteInput, seed = seedFor([...taste.artists
     if (target) target.artistIds = [a.id, ...target.artistIds].slice(0, 5);
   }
 
-  const remaining = buildings.filter((b) => !taken.has(b.id)).map((b, i) => ({ ...b, id: i }));
-
   /* ---------------- trees, lamps, roads, bridges ---------------- */
   const trees: TreePlan[] = [];
   for (const b of blocks) {
     if (b.use === 'park') {
-      const n = 7 + Math.floor(rng() * 8);
+      const n = 10 + Math.floor(rng() * 10);
       for (let i = 0; i < n; i++) {
         trees.push({
           position: { x: b.center.x + range(rng, -1, 1) * (BLOCK / 2 - 1.2), z: b.center.z + range(rng, -1, 1) * (BLOCK / 2 - 1.2) },
@@ -560,7 +591,7 @@ export function generateCity(taste: TasteInput, seed = seedFor([...taste.artists
         placed = true;
         bridges.push({
           position: p,
-          length: Math.min(34, riverWidth / sin + 5),
+          length: Math.min(44, riverWidth / sin + 6),
           rotation: orient === 'x' ? Math.PI / 2 : 0,
         });
       }
@@ -588,12 +619,103 @@ export function generateCity(taste: TasteInput, seed = seedFor([...taste.artists
   connections.sort((x, y) => Number(userIds.has(y.from) || userIds.has(y.to)) - Number(userIds.has(x.from) || userIds.has(x.to)));
 
   const cityArtistIds = new Set<string>([...home.keys(), ...userIds]);
+
   const artists = [
     ...ARTISTS.filter((a) => cityArtistIds.has(a.id)),
     // Artists looked up from outside the catalogue (e.g. MusicBrainz).
     ...input.artists.filter((a) => !ARTIST_BY_ID[a.id]),
     ...customs,
   ];
+
+  /* ---------------- record label towers ---------------- */
+  const labels: LabelTowerPlan[] = [];
+  const towerBlocks = new Set<number>();
+  const labelCandidates = RECORD_LABELS.map((l) => {
+    const here = l.artistIds.filter((id) => cityArtistIds.has(id));
+    return { l, here, score: here.reduce((s, id) => s + (userIds.has(id) ? 3 : 1), 0) };
+  })
+    .filter((x) => x.here.length)
+    .sort((a, b) => b.score - a.score || b.here.length - a.here.length || a.l.founded - b.l.founded);
+  const maxLabels = Math.max(3, Math.min(10, Math.round(districts.length * 1.3) + 1));
+  for (const { l, here } of labelCandidates.slice(0, maxLabels)) {
+    const spots = here.map((id) => home.get(id)).filter((p): p is Vec2 => !!p);
+    const genreCount = new Map<GenreId, number>();
+    for (const id of here) {
+      const g = ARTIST_BY_ID[id]?.genres[0];
+      if (g) genreCount.set(g, (genreCount.get(g) ?? 0) + 1);
+    }
+    const genre = [...genreCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? primary.genre;
+    const anchor = spots.length
+      ? { x: spots.reduce((s, p) => s + p.x, 0) / spots.length, z: spots.reduce((s, p) => s + p.z, 0) / spots.length }
+      : districtFor([genre]).center;
+    const block = blocks
+      .filter((b) => b.use === 'buildings' && !venueBlocks.has(b.id) && !towerBlocks.has(b.id))
+      .filter((b) => labels.every((t) => dist(t.position, b.center) > PITCH * 2.2))
+      .map((b) => ({ b, s: dist(b.center, anchor) + rng() * 10 }))
+      .sort((x, y) => x.s - y.s)[0]?.b;
+    if (!block) continue;
+    towerBlocks.add(block.id);
+    block.use = 'plaza';
+    labels.push({
+      id: `label-${l.id}`,
+      labelId: l.id,
+      name: l.name,
+      position: block.center,
+      height: 40 + Math.min(5, here.length) * 6 + rng() * 8,
+      color: l.color,
+      artistIds: here,
+      genre,
+    });
+  }
+  const remaining = buildings.filter((b) => !taken.has(b.id) && !towerBlocks.has(b.blockId)).map((b, i) => ({ ...b, id: i }));
+
+  /* ---------------- street buskers ---------------- */
+  const buskers: BuskerPlan[] = [];
+  const blocked = (p: Vec2) =>
+    remaining.some((b) => Math.abs(p.x - b.position.x) < b.width / 2 + 0.7 && Math.abs(p.z - b.position.z) < b.depth / 2 + 0.7) ||
+    venues.some((v) => dist(v.position, p) < v.footprint * 0.75 + 1) ||
+    riverDist(p) < riverWidth / 2 + 2;
+  const corners: { p: Vec2; rot: number; block: Block }[] = [];
+  const inset = BLOCK / 2 - 0.7;
+  for (const b of blocks) {
+    if (b.use !== 'buildings' && b.use !== 'park') continue;
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      const p = { x: b.center.x + sx * inset, z: b.center.z + sz * inset };
+      if (!blocked(p)) corners.push({ p, rot: Math.atan2(sx, sz), block: b });
+    }
+  }
+  const buskerArtists = artists.filter((a) => !a.custom && ARTIST_BY_ID[a.id]);
+  const buskerUse = new Map<string, number>();
+  const usedStage = new Set<string>();
+  for (const d of districts) {
+    const count = Math.max(2, Math.min(6, Math.round(2 + d.weight * 8)));
+    const pool = buskerArtists
+      .filter((a) => a.genres.includes(d.genre))
+      .map((a) => ({ a, s: (userIds.has(a.id) ? 3 : 0) + (a.genres[0] === d.genre ? 1 : 0) - (buskerUse.get(a.id) ?? 0) * 2 + rng() }))
+      .sort((x, y) => y.s - x.s);
+    const options = corners
+      .filter((c) => c.block.dominant === d.genre)
+      .map((c) => ({ c, s: dist(c.p, d.center) + rng() * PITCH * 2 }))
+      .sort((x, y) => x.s - y.s);
+    for (const { c } of options) {
+      if (buskers.filter((k) => k.genre === d.genre).length >= count || !pool.length) break;
+      if (buskers.some((k) => dist(k.position, c.p) < PITCH * 1.6)) continue;
+      const pickA = pool[buskers.filter((k) => k.genre === d.genre).length % pool.length].a;
+      buskerUse.set(pickA.id, (buskerUse.get(pickA.id) ?? 0) + 1);
+      const names = shuffle(rng, STAGE_NAMES).filter((n) => !usedStage.has(n));
+      const name = names[0] ?? `Busker No. ${buskers.length + 1}`;
+      usedStage.add(name);
+      buskers.push({
+        id: `busker-${buskers.length}`,
+        name,
+        position: c.p,
+        rotation: c.rot,
+        artistId: pickA.id,
+        genre: d.genre,
+        instrument: pick(rng, INSTRUMENTS[d.genre]),
+      });
+    }
+  }
 
   return {
     seed,
@@ -612,7 +734,9 @@ export function generateCity(taste: TasteInput, seed = seedFor([...taste.artists
     roads,
     trees,
     lamps,
-    connections: connections.slice(0, 48),
+    connections: connections.slice(0, 80),
+    labels,
+    buskers,
     dna,
     artists,
     userArtistIds: input.artists.map((a) => a.id),
