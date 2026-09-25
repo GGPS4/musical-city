@@ -247,6 +247,48 @@ test('record store crates hold the store’s artists first, filed by genre then 
   assert.deepEqual(crateFor(plan, store.id), crate, 'deterministic');
 });
 
+test('streets are named after songs by artists in the city, each song once', () => {
+  const plan = generateCity(resolveTaste(splitInput(DEMO)));
+  assert.ok(plan.streets.length >= 20, `${plan.streets.length} streets`);
+  const songs = new Set<string>();
+  for (const st of plan.streets) {
+    const a = ARTIST_BY_ID[st.artistId];
+    assert.ok(a && a.songs.some((s) => s.title.replace(/[“”"]/g, '').replace(/\s*\(.*?\)/g, '').trim() === st.song), `${st.name} → ${st.song}`);
+    assert.ok(st.name.startsWith(st.song), st.name);
+    assert.ok(!songs.has(st.song), `duplicate ${st.song}`);
+    songs.add(st.song);
+    assert.ok(st.to > st.from);
+  }
+});
+
+test('artist homes and album billboards use real catalogue data', () => {
+  const plan = generateCity(resolveTaste(splitInput(DEMO)));
+  for (const id of plan.userArtistIds) assert.ok(plan.homes.some((h) => h.artistId === id), `${id} has a home`);
+  for (const h of plan.homes) assert.ok(!plan.buildings.some((b) => Math.hypot(b.position.x - h.position.x, b.position.z - h.position.z) < 0.5), 'home replaced its building');
+  assert.ok(plan.billboards.length >= 6);
+  for (const b of plan.billboards) {
+    const a = ARTIST_BY_ID[b.artistId];
+    assert.equal(b.title, a.album.title);
+    assert.equal(b.year, a.album.year);
+    assert.ok(b.baseHeight >= 14);
+  }
+});
+
+test('plaques and tours come from documented facts', async () => {
+  const { plaqueFacts, toursFor } = await import('../src/core/tours.js');
+  const plan = generateCity(resolveTaste(splitInput(DEMO)));
+  const v = plan.venues.find((x) => x.artistIds.includes('the-clash'))!;
+  const facts = plaqueFacts(plan, v.id);
+  assert.ok(facts.some((f) => f.includes('London Calling (1979)')));
+  const tours = toursFor(plan);
+  const grand = tours.find((t) => t.id === 'grand')!;
+  assert.ok(grand && grand.stops.length >= 3);
+  const years = grand.stops.map((s) => Number(s.sub.match(/\d{4}/)?.[0]));
+  assert.deepEqual(years, [...years].sort((a, b) => a - b), 'grand tour runs oldest first');
+  assert.ok(tours.some((t) => t.id === 'scene-beatlemania'));
+  for (const t of tours) for (const s of t.stops) assert.ok(s.song || s.artistId, `${t.id}/${s.id} has music`);
+});
+
 test('song titles de-duplicate across remasters and spellings', async () => {
   const { songKey } = await import('../src/music/musicService.js');
   assert.equal(songKey('Anarchy in the U.K.'), songKey('Anarchy In The UK (Remastered 2007)'));
