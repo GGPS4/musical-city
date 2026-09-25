@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { GENRES } from '../data/genres.js';
-import type { LandmarkPlan, VenuePlan } from '../types.js';
+import type { BuskerPlan, LabelTowerPlan, LandmarkPlan, VenuePlan } from '../types.js';
 import { geo } from './geometries.js';
 import { FACADES, MATS, glow, std } from './materials.js';
-import { beamTexture, graffitiTexture, pulseTexture, signTexture, vinylTexture } from './textures.js';
+import { beamTexture, glowTexture, graffitiTexture, noteTexture, pulseTexture, signTexture, vinylTexture } from './textures.js';
 
 /**
  * Hand-built models for venues, historical landmarks and genre monuments.
@@ -20,6 +20,21 @@ export interface Model {
 }
 
 const G = () => geo();
+
+/** Venues and landmarks are drawn larger than life so they read from across the city. */
+export const VENUE_SCALE = 1.3;
+export const LANDMARK_SCALE = 1.35;
+
+/** Wraps a model in a positioned outer group and scales the contents. */
+function wrap(inner: THREE.Group, k: number, x: number, y: number, z: number, rot: number, userData: Record<string, unknown>): THREE.Group {
+  const outer = new THREE.Group();
+  inner.scale.setScalar(k);
+  outer.add(inner);
+  outer.position.set(x, y, z);
+  outer.rotation.y = rot;
+  outer.userData = userData;
+  return outer;
+}
 
 function mesh(
   geometry: THREE.BufferGeometry,
@@ -120,7 +135,7 @@ function amp(parent: THREE.Object3D, x: number, y: number, z: number, s = 1) {
 export function buildVenue(v: VenuePlan): Model {
   const group = new THREE.Group();
   const ticks: Tick[] = [];
-  const f = Math.min(6.2, v.footprint);
+  const f = Math.min(6.2, v.footprint / VENUE_SCALE);
   const genre = GENRES[v.genres[0]];
   const bodyColor = genre.style.palette[0];
   const neon = v.neon;
@@ -229,10 +244,8 @@ export function buildVenue(v: VenuePlan): Model {
 
   pickBox(group, f, height + 1, f);
   marker(group, height + 3.2, neon, ticks, false);
-  group.position.set(v.position.x, 0.18, v.position.z);
-  group.rotation.y = v.rotation;
-  group.userData = { kind: 'venue', id: v.id };
-  return { group, height, ticks };
+  const outer = wrap(group, VENUE_SCALE, v.position.x, 0.18, v.position.z, v.rotation, { kind: 'venue', id: v.id });
+  return { group: outer, height: height * VENUE_SCALE, ticks };
 }
 
 /** Per-mesh colour for facade meshes (facade materials are shared, so clone). */
@@ -290,7 +303,7 @@ export function buildLandmark(l: LandmarkPlan): Model {
   const ticks: Tick[] = [];
   const genre = GENRES[l.genres[0] ?? 'classic-rock'];
   const neon = genre.style.neon[0];
-  const S = Math.min(11, l.footprint);
+  const S = Math.min(11, l.footprint / LANDMARK_SCALE);
   let height = 6;
   const historical = l.type === 'historical';
 
@@ -827,8 +840,166 @@ export function buildLandmark(l: LandmarkPlan): Model {
 
   pickBox(group, S * 0.9, height + 1, S * 0.9);
   marker(group, height + 3.5, historical ? '#ffcf6b' : '#c9b6ff', ticks, historical);
-  group.position.set(l.position.x, l.model === 'boat' ? 0.05 : 0.2, l.position.z);
-  group.rotation.y = l.rotation;
-  group.userData = { kind: 'landmark', id: l.id };
-  return { group, height, ticks };
+  const outer = wrap(group, LANDMARK_SCALE, l.position.x, l.model === 'boat' ? 0.05 : 0.2, l.position.z, l.rotation, { kind: 'landmark', id: l.id });
+  return { group: outer, height: height * LANDMARK_SCALE, ticks };
+}
+
+/* ------------------------------------------------------------------ */
+/* Record label towers                                                 */
+/* ------------------------------------------------------------------ */
+
+export function buildLabelTower(t: LabelTowerPlan): Model {
+  const group = new THREE.Group();
+  const ticks: Tick[] = [];
+  const H = t.height;
+  const round = t.labelId.length % 3 === 0;
+  box(MATS.plinth(), 0, 0, 0, 13, 0.35, 13, group);
+  // Glass lobby with a glowing entrance.
+  box(FACADES.glass(), 0, 0.35, 0, 10, 4, 10, group);
+  box(glow(t.color, 1.6), 0, 0.5, 5.02, 3.2, 2.6, 0.05, group, false);
+  sign(t.name, t.color, 0.9, group, 0, 4.9, 5.15, 'neon', 9);
+  const shaftH = H - 9;
+  const w = 7;
+  if (round) {
+    const shaft = mesh(G().cylinder, FACADES.glass(), 0, 4.35, 0, w + 0.6, shaftH, w + 0.6, group);
+    tint(shaft, '#a9b8d6');
+    const ring = new THREE.TorusGeometry((w + 0.75) / 2, 0.07, 6, 48);
+    for (let y = 10; y < shaftH - 2; y += 10) {
+      const r = new THREE.Mesh(ring, glow(t.color, 1.4));
+      r.rotation.x = Math.PI / 2;
+      r.position.y = 4.35 + y;
+      group.add(r);
+    }
+  } else {
+    const shaft = box(FACADES.glass(), 0, 4.35, 0, w, shaftH, w, group);
+    tint(shaft, '#b7c3dc');
+    // Neon edges running up the corners.
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box(glow(t.color, 1.8), (sx * w) / 2, 4.35, (sz * w) / 2, 0.16, shaftH, 0.16, group, false);
+  }
+  const top = 4.35 + shaftH;
+  box(MATS.darkMetal(), 0, top, 0, w + 0.6, 0.6, w + 0.6, group);
+  // The label's name on all four sides near the top.
+  for (let i = 0; i < 4; i++) {
+    const holder = new THREE.Group();
+    holder.rotation.y = (i * Math.PI) / 2;
+    group.add(holder);
+    sign(t.name, t.color, 1.4, holder, 0, top - 2.2, w / 2 + (round ? 0.45 : 0.08), 'neon', w - 0.4);
+  }
+  // A giant record spinning on the roof.
+  const disc = new THREE.Group();
+  const tex = vinylTexture(t.color);
+  const vinylMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.35, metalness: 0.2, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.3 });
+  const rec = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.2, 48), [MATS.black(), vinylMat, vinylMat]);
+  rec.rotation.x = Math.PI / 2;
+  rec.scale.setScalar(3.6);
+  rec.castShadow = true;
+  disc.add(rec);
+  disc.position.set(0, top + 4.6, 0);
+  group.add(disc);
+  box(MATS.metal(), 0, top + 0.6, 0, 0.3, 0.8, 0.3, group);
+  ticks.push((time) => {
+    rec.rotation.y = time * 0.9;
+    disc.rotation.y = time * 0.25;
+  });
+  // Beacon light.
+  const beacon = mesh(G().sphere, glow(t.color, 2.4), 0, top + 8.6, 0, 0.5, 0.5, 0.5, group, false);
+  ticks.push((time) => (beacon.visible = Math.sin(time * 2.2 + H) > -0.2));
+  pickBox(group, 12, H + 2, 12);
+  const outer = wrap(group, 1, t.position.x, 0.18, t.position.z, 0, { kind: 'label', id: t.id });
+  return { group: outer, height: top + 9, ticks };
+}
+
+/* ------------------------------------------------------------------ */
+/* Street buskers                                                      */
+/* ------------------------------------------------------------------ */
+
+export const BUSKER_SCALE = 1.5;
+
+export function buildBusker(b: BuskerPlan): Model {
+  const group = new THREE.Group();
+  const ticks: Tick[] = [];
+  const color = GENRES[b.genre].style.neon[0];
+  // Pool of light on the pavement.
+  const pool = new THREE.Mesh(G().groundPlane, new THREE.MeshBasicMaterial({ map: glowTexture(), color: new THREE.Color(color).multiplyScalar(0.8), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+  pool.scale.set(3.2, 1, 3.2);
+  pool.position.y = 0.03;
+  group.add(pool);
+  const coat = ['#2b2d42', '#6d2e46', '#264653', '#3d405b', '#5e503f'][b.id.length % 5];
+  const body = person(group, 0, 0, coat, 0, 1.25);
+  const wood = colored('#8a5a2b', 0.6);
+  const gold = colored('#d4a73a', 0.3, 0.8);
+  const dark = MATS.black();
+  const inst = new THREE.Group();
+  body.add(inst);
+  switch (b.instrument) {
+    case 'guitar':
+    case 'bass': {
+      const long = b.instrument === 'bass' ? 1.3 : 1;
+      box(b.instrument === 'bass' ? colored('#1d3557', 0.4) : wood, 0, 0.18, 0.2, 0.34, 0.4, 0.08, inst);
+      box(dark, 0.32 * long, 0.36, 0.2, 0.55 * long, 0.05, 0.05, inst).rotation.z = 0.35;
+      inst.rotation.z = -0.35;
+      break;
+    }
+    case 'violin':
+      box(wood, 0.12, 0.62, 0.18, 0.12, 0.3, 0.06, inst).rotation.z = 1.1;
+      box(dark, -0.05, 0.75, 0.25, 0.5, 0.015, 0.015, inst).rotation.z = -0.4;
+      break;
+    case 'sax':
+      mesh(G().cylinderLow, gold, 0.1, 0.1, 0.2, 0.08, 0.5, 0.08, inst).rotation.z = 0.2;
+      mesh(G().coneRound, gold, 0.12, 0.05, 0.28, 0.2, 0.18, 0.2, inst).rotation.x = -1.2;
+      break;
+    case 'trumpet':
+      mesh(G().cylinderLow, gold, 0, 0.72, 0.35, 0.05, 0.45, 0.05, inst).rotation.x = Math.PI / 2;
+      mesh(G().coneRound, gold, 0, 0.72, 0.6, 0.18, 0.18, 0.18, inst).rotation.x = Math.PI / 2;
+      break;
+    case 'keys':
+      box(dark, 0, 0.35, 0.45, 0.9, 0.08, 0.3, group);
+      box(MATS.white(), 0, 0.43, 0.42, 0.84, 0.02, 0.16, group, false);
+      box(MATS.metal(), -0.35, 0, 0.45, 0.04, 0.35, 0.04, group);
+      box(MATS.metal(), 0.35, 0, 0.45, 0.04, 0.35, 0.04, group);
+      break;
+    case 'drums':
+      mesh(G().cylinder, colored('#b33', 0.5), 0.35, 0, 0.35, 0.4, 0.3, 0.4, group);
+      mesh(G().cylinder, colored('#ddd', 0.5), -0.35, 0, 0.35, 0.35, 0.36, 0.35, group);
+      mesh(G().cylinder, gold, 0, 0.62, 0.55, 0.45, 0.02, 0.45, group, false);
+      break;
+    case 'turntables': {
+      box(dark, 0, 0, 0.5, 1.1, 0.5, 0.45, group);
+      for (const sx of [-0.28, 0.28]) {
+        const d = mesh(G().cylinder, colored('#111', 0.3), sx, 0.5, 0.5, 0.36, 0.02, 0.36, group, false);
+        ticks.push((t) => (d.rotation.y = t * 3));
+      }
+      mesh(G().sphere, glow(color, 1.5), 0, 0.52, 0.66, 0.08, 0.04, 0.04, group, false);
+      break;
+    }
+    case 'mic':
+      box(MATS.metal(), 0, 0, 0.35, 0.03, 0.75, 0.03, group);
+      mesh(G().sphere, dark, 0, 0.78, 0.35, 0.09, 0.12, 0.09, group);
+      break;
+  }
+  // Open case with coins.
+  box(colored('#3b2a20'), 0.7, 0, 0.55, 0.5, 0.06, 0.25, group);
+  box(colored('#7a1f2b', 1), 0.7, 0.06, 0.55, 0.44, 0.01, 0.2, group, false);
+  for (let i = 0; i < 3; i++) mesh(G().cylinder, gold, 0.6 + i * 0.09, 0.075, 0.52 + (i % 2) * 0.06, 0.05, 0.01, 0.05, group, false);
+  // Notes drifting up.
+  const notes: THREE.Sprite[] = [];
+  for (let i = 0; i < 3; i++) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: noteTexture(), color: new THREE.Color(color).multiplyScalar(1.8), transparent: true, depthWrite: false, toneMapped: false }));
+    sp.scale.setScalar(0.35);
+    group.add(sp);
+    notes.push(sp);
+  }
+  const phase = (b.position.x * 7.1 + b.position.z * 3.3) % 6;
+  ticks.push((t) => {
+    body.position.y = Math.abs(Math.sin(t * 4 + phase)) * 0.05;
+    body.rotation.y = Math.sin(t * 1.3 + phase) * 0.15;
+    notes.forEach((n, i) => {
+      const k = (t * 0.45 + i / 3 + phase) % 1;
+      n.position.set(Math.sin((k + i) * 5) * 0.35, 1.2 + k * 1.6, 0.2);
+      (n.material as THREE.SpriteMaterial).opacity = Math.sin(k * Math.PI);
+    });
+  });
+  pickBox(group, 1.8, 2, 1.8);
+  const outer = wrap(group, BUSKER_SCALE, b.position.x, 0.2, b.position.z, b.rotation, { kind: 'busker', id: b.id });
+  return { group: outer, height: 2 * BUSKER_SCALE, ticks };
 }

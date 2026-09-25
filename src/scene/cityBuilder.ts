@@ -5,14 +5,14 @@ import { addBuildings, TIMELINE } from './buildings.js';
 import { geo } from './geometries.js';
 import { Instancer } from './instancer.js';
 import { MATS, cityUniforms, glow, std } from './materials.js';
-import { buildLandmark, buildVenue, type Model, type Tick } from './models.js';
+import { buildBusker, buildLabelTower, buildLandmark, buildVenue, type Model, type Tick } from './models.js';
 import { beamTexture, glowTexture } from './textures.js';
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 const easeOutBack = (t: number) => 1 + 2.4 * Math.pow(t - 1, 3) + 1.4 * Math.pow(t - 1, 2);
 
 export interface PickHit {
-  kind: 'venue' | 'landmark' | 'building';
+  kind: 'venue' | 'landmark' | 'building' | 'label' | 'busker';
   id: string | number;
 }
 
@@ -27,6 +27,8 @@ export class CityView {
   readonly group = new THREE.Group();
   readonly venues = new Map<string, Model>();
   readonly landmarks = new Map<string, Model>();
+  readonly towers = new Map<string, Model>();
+  readonly buskers = new Map<string, Model>();
   readonly pickables: THREE.Object3D[] = [];
   private instancer = new Instancer();
   private ticks: Tick[] = [];
@@ -69,8 +71,24 @@ export class CityView {
       this.ticks.push(...m.ticks);
       this.animate(m.group, opts.animate ? TIMELINE.landmarks + i * 0.09 : -1, 0.7);
     });
+    plan.labels.forEach((t, i) => {
+      const m = buildLabelTower(t);
+      this.towers.set(t.id, m);
+      this.group.add(m.group);
+      this.pickables.push(m.group);
+      this.ticks.push(...m.ticks);
+      this.animate(m.group, opts.animate ? TIMELINE.landmarks + 0.2 + i * 0.08 : -1, 0.8);
+    });
+    plan.buskers.forEach((b, i) => {
+      const m = buildBusker(b);
+      this.buskers.set(b.id, m);
+      this.group.add(m.group);
+      this.pickables.push(m.group);
+      this.ticks.push(...m.ticks);
+      this.animate(m.group, opts.animate ? TIMELINE.landmarks + 0.5 + i * 0.03 : -1, 0.5);
+    });
     this.buildConnections();
-    this.buildCars(opts.mobile ? 18 : 46);
+    this.buildCars(opts.mobile ? 30 : 110);
     this.group.add(this.selection, this.focusBeams);
     cityUniforms.uLights.value = opts.animate ? 0 : 1;
   }
@@ -581,6 +599,27 @@ export class CityView {
     }
   }
 
+  /** Glowing arcs from a point (e.g. a label tower's roof) to places across the city. */
+  links(from: Vec2, fromHeight: number, targets: Vec2[], color = '#ffd27a'): void {
+    for (const p of targets) {
+      const a = new THREE.Vector3(from.x, fromHeight, from.z);
+      const b = new THREE.Vector3(p.x, 6, p.z);
+      const mid = a.clone().lerp(b, 0.5);
+      mid.y = Math.max(fromHeight, 6) + a.distanceTo(b) * 0.18;
+      const curve = new THREE.QuadraticBezierCurve3(a, mid, b);
+      const mesh = new THREE.Mesh(
+        new THREE.TubeGeometry(curve, 48, 0.22, 6),
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(1.6), transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }),
+      );
+      this.focusBeams.add(mesh);
+      const ring = new THREE.Mesh(geo().torus, glow(color, 2));
+      ring.rotation.x = Math.PI / 2;
+      ring.scale.setScalar(4);
+      ring.position.set(p.x, 0.4, p.z);
+      this.focusBeams.add(ring);
+    }
+  }
+
   /* ------------------------------------------------------------------ */
   /* Gig night                                                          */
   /* ------------------------------------------------------------------ */
@@ -698,7 +737,8 @@ export class CityView {
       return null;
     }
     while (o) {
-      if (o.userData.kind === 'venue' || o.userData.kind === 'landmark') return { kind: o.userData.kind, id: o.userData.id };
+      const k = o.userData.kind;
+      if (k === 'venue' || k === 'landmark' || k === 'label' || k === 'busker') return { kind: k, id: o.userData.id };
       o = o.parent;
     }
     return null;

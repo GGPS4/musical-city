@@ -195,3 +195,18 @@ export function vinylTexture(label: string): THREE.Texture {
   ctx.fill();
   return finish(key, c);
 }
+
+/** A glowing music note for buskers. */
+export function noteTexture(): THREE.Texture {
+  const hit = cache.get('note');
+  if (hit) return hit;
+  const [c, ctx] = canvas(64, 64);
+  ctx.fillStyle = '#ffffff';
+  ctx.shadowColor = '#ffffff';
+  ctx.shadowBlur = 8;
+  ctx.font = 'bold 46px "Segoe UI Symbol", "Apple Symbols", "DejaVu Sans", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('♪', 32, 34);
+  return finish('note', c);
+}

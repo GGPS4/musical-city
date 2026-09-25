@@ -10,6 +10,9 @@ import { TIMELINE } from './buildings.js';
 import { CityView, type PickHit } from './cityBuilder.js';
 import { LabelLayer, type LabelKind } from './labels.js';
 import { WalkMode, type Nearby } from './walk.js';
+import { MOOD_BY_ID, MoodState, Rain, Sparkles, type MoodId } from './mood.js';
+import { glowTexture } from './textures.js';
+import { cityUniforms } from './materials.js';
 
 export interface SceneEvents {
   onPick: (hit: PickHit | null) => void;
@@ -57,6 +60,22 @@ export class CityScene {
   private moon!: THREE.DirectionalLight;
   readonly walk: WalkMode;
   private width = 1;
+  private baseFog = 0.0028;
+  private skyUniforms = {
+    uTop: { value: new THREE.Color('#03040a') },
+    uMid: { value: new THREE.Color('#0d0b1c') },
+    uHor: { value: new THREE.Color('#291429') },
+    uFlash: { value: 0 },
+  };
+  private starsMat!: THREE.PointsMaterial;
+  private hemi = new THREE.HemisphereLight(0x4a5a9a, 0x1c1410, 0.9);
+  private ambient = new THREE.AmbientLight(0x30284a, 0.35);
+  private warm = new THREE.DirectionalLight(0xff9a5a, 0.25);
+  private mood = new MoodState(MOOD_BY_ID.night.look);
+  moodId: MoodId = 'night';
+  private rain: Rain | null = null;
+  private sparkles: Sparkles | null = null;
+  private flash = { next: 4, level: 0 };
   private height = 1;
 
   constructor(private container: HTMLElement, labelRoot: HTMLElement, private events: SceneEvents) {
@@ -73,7 +92,7 @@ export class CityScene {
     this.scene.background = new THREE.Color(0x06070f);
     this.scene.fog = new THREE.FogExp2(0x0a0b1a, 0.0028);
 
-    this.camera = new THREE.PerspectiveCamera(38, 1, 0.5, 2500);
+    this.camera = new THREE.PerspectiveCamera(38, 1, 0.5, 4000);
     this.camera.position.set(220, 200, 220);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -98,6 +117,9 @@ export class CityScene {
     this.addLights();
     this.addEnvironment();
     if (!this.mobile) this.setupComposer();
+    this.rain = new Rain(this.mobile ? 1500 : 4000);
+    this.sparkles = new Sparkles(this.mobile ? 250 : 600, glowTexture());
+    this.scene.add(this.rain.object, this.sparkles.object);
 
     this.labels = new LabelLayer(labelRoot, (k, id) => this.events.onLabel(k, id));
     this.walk = new WalkMode(this.camera, this.renderer.domElement, (n) => this.events.onNearby?.(n));
@@ -116,19 +138,20 @@ export class CityScene {
 
   private addSky() {
     const sky = new THREE.Mesh(
-      new THREE.SphereGeometry(1200, 32, 16),
+      new THREE.SphereGeometry(1800, 32, 16),
       new THREE.ShaderMaterial({
         side: THREE.BackSide,
         depthWrite: false,
         fog: false,
-        uniforms: {},
+        uniforms: this.skyUniforms,
         vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
         fragmentShader: `varying vec3 vP;
+          uniform vec3 uTop; uniform vec3 uMid; uniform vec3 uHor; uniform float uFlash;
           void main(){
             float h = clamp(vP.y * 0.5 + 0.5, 0.0, 1.0);
-            vec3 top = vec3(0.012, 0.015, 0.04);
-            vec3 mid = vec3(0.05, 0.045, 0.11);
-            vec3 hor = vec3(0.16, 0.08, 0.16);
+            vec3 top = uTop;
+            vec3 mid = uMid;
+            vec3 hor = uHor + uFlash;
             vec3 c = mix(hor, mid, smoothstep(0.45, 0.6, h));
             c = mix(c, top, smoothstep(0.6, 0.95, h));
             gl_FragColor = vec4(c, 1.0);
@@ -146,17 +169,16 @@ export class CityScene {
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    const stars = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xcfd8ff, size: 1.6, sizeAttenuation: false, fog: false, transparent: true, opacity: 0.7 }));
-    this.scene.add(stars);
+    this.starsMat = new THREE.PointsMaterial({ color: 0xcfd8ff, size: 1.6, sizeAttenuation: false, fog: false, transparent: true, opacity: 0.7 });
+    this.scene.add(new THREE.Points(g, this.starsMat));
   }
 
   private addLights() {
-    this.scene.add(new THREE.HemisphereLight(0x4a5a9a, 0x1c1410, 0.9));
-    this.scene.add(new THREE.AmbientLight(0x30284a, 0.35));
+    this.scene.add(this.hemi, this.ambient);
     const moon = new THREE.DirectionalLight(0xaebfff, 1.1);
     moon.position.set(-120, 180, 90);
     moon.castShadow = !this.mobile;
-    moon.shadow.mapSize.set(2048, 2048);
+    moon.shadow.mapSize.set(4096, 4096);
     moon.shadow.bias = -0.0004;
     moon.shadow.normalBias = 0.4;
     const s = moon.shadow.camera;
@@ -166,9 +188,8 @@ export class CityScene {
     s.far = 500;
     this.moon = moon;
     this.scene.add(moon, moon.target);
-    const warm = new THREE.DirectionalLight(0xff9a5a, 0.25);
-    warm.position.set(120, 40, -100);
-    this.scene.add(warm);
+    this.warm.position.set(120, 40, -100);
+    this.scene.add(this.warm);
   }
 
   /** A tiny procedural "city lights" environment for glass and metal reflections. */
@@ -221,11 +242,17 @@ export class CityScene {
     this.city = new CityView(plan, { animate, mobile: this.mobile });
     this.scene.add(this.city.group);
     this.buildDone = !animate;
-    this.controls.maxDistance = plan.size * 2;
+    this.controls.maxDistance = plan.size * 1.6;
     const r = plan.size / 2 + 20;
-    this.moon.shadow.camera.left = this.moon.shadow.camera.bottom = -r;
-    this.moon.shadow.camera.right = this.moon.shadow.camera.top = r;
-    this.moon.shadow.camera.updateProjectionMatrix();
+    const sc = this.moon.shadow.camera;
+    sc.left = sc.bottom = -r;
+    sc.right = sc.top = r;
+    sc.far = plan.size * 3;
+    sc.updateProjectionMatrix();
+    this.moon.position.set(-0.6, 0.9, 0.45).multiplyScalar(plan.size);
+    // Keep the haze proportional so a bigger city doesn't vanish into fog.
+    this.baseFog = 0.0028 * (200 / plan.size);
+    (this.scene.fog as THREE.FogExp2).density = this.baseFog;
 
     for (const d of plan.districts) {
       this.labels.add('district', d.genre, d.name, districtSubs[d.genre] ?? d.nickname, new THREE.Vector3(d.center.x, 16, d.center.z), [0, 9999]);
@@ -238,6 +265,13 @@ export class CityScene {
       this.labels.add('landmark', l.id, l.name, l.type === 'historical' ? 'Historical landmark' : 'Musical interpretation', new THREE.Vector3(l.position.x, (model?.height ?? 6) + 6.5, l.position.z), [0, plan.size * (l.type === 'historical' ? 0.62 : 0.45)]);
     }
     for (const v of plan.venues) this.addVenueLabel(v.id);
+    for (const t of plan.labels) {
+      const model = this.city.towers.get(t.id);
+      this.labels.add('label', t.id, t.name, 'Record label', new THREE.Vector3(t.position.x, (model?.height ?? 40) + 4, t.position.z), [0, plan.size * 0.9]);
+    }
+    for (const b of plan.buskers) {
+      this.labels.add('busker', b.id, b.name, 'Busker', new THREE.Vector3(b.position.x, 4.4, b.position.z), [0, plan.size * 0.16]);
+    }
     this.walk.setPlan(plan);
 
     if (animate) {
@@ -410,7 +444,6 @@ export class CityScene {
     if (!this.walkLight.parent) this.camera.add(this.walkLight);
     if (!this.camera.parent) this.scene.add(this.camera);
     this.walkLight.visible = true;
-    this.renderer.toneMappingExposure = 1.4;
     this.walk.enter(at, lookAt);
   }
 
@@ -421,7 +454,6 @@ export class CityScene {
     const look = this.walk.lookPoint();
     this.walk.exit();
     this.walkLight.visible = false;
-    this.renderer.toneMappingExposure = 1.05;
     this.controls.enabled = true;
     this.controls.target.copy(look);
     const back = this.camera.position.clone().sub(look).setY(0).normalize();
@@ -478,6 +510,7 @@ export class CityScene {
     this.time += dt;
     const city = this.city;
     city?.update(dt);
+    this.applyMood(dt);
 
     if (this.walk.active) {
       this.walk.update(dt, this.time);
@@ -550,6 +583,56 @@ export class CityScene {
       this.renderer.shadowMap.enabled = false;
       this.resize();
     }
+  }
+
+  /* ---------------- mood ---------------- */
+
+  setMood(id: MoodId, instant = false): void {
+    this.moodId = id;
+    this.mood.set(MOOD_BY_ID[id].look, instant);
+    this.flash.next = this.time + 1.5;
+  }
+
+  private applyMood(dt: number) {
+    const m = this.mood;
+    m.update(dt);
+    const c = m.colors;
+    const n = m.nums;
+    // Lightning: two quick flickers every few seconds.
+    let flash = 0;
+    if (m.lightning && this.time > this.flash.next) {
+      this.flash.level = 1;
+      this.flash.next = this.time + 3 + Math.random() * 6;
+    }
+    if (this.flash.level > 0) {
+      this.flash.level = Math.max(0, this.flash.level - dt * 3.2);
+      flash = this.flash.level * (Math.sin(this.flash.level * 40) > 0 ? 1 : 0.3);
+    }
+    this.skyUniforms.uTop.value.copy(c.skyTop);
+    this.skyUniforms.uMid.value.copy(c.skyMid);
+    this.skyUniforms.uHor.value.copy(c.skyHorizon);
+    this.skyUniforms.uFlash.value = flash * 0.5;
+    const fog = this.scene.fog as THREE.FogExp2;
+    fog.color.copy(c.fog);
+    fog.density = this.baseFog * n.fogDensity * (this.walk.active ? 1.6 : 1);
+    (this.scene.background as THREE.Color).copy(c.skyTop).lerp(c.fog, 0.5);
+    this.hemi.color.copy(c.hemiSky);
+    this.hemi.groundColor.copy(c.hemiGround);
+    this.hemi.intensity = n.hemi + flash * 2.5;
+    this.ambient.color.copy(c.ambientColor);
+    this.ambient.intensity = n.ambient;
+    this.moon.color.copy(c.moonColor);
+    this.moon.intensity = n.moon;
+    this.warm.color.copy(c.warmColor);
+    this.warm.intensity = n.warm;
+    this.starsMat.opacity = n.stars;
+    cityUniforms.uMoodTint.value.copy(c.windowTint);
+    cityUniforms.uMoodLit.value = n.windowLevel;
+    this.renderer.toneMappingExposure = n.exposure * (this.walk.active ? 1.33 : 1);
+    if (this.bloom) this.bloom.strength = n.bloom;
+    const center = this.walk.active ? this.camera.position : this.controls.target;
+    this.rain?.update(dt, center, n.rain);
+    this.sparkles?.update(this.time, center, n.sparkles);
   }
 
   genreColor(genre: string): string {

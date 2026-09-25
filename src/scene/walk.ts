@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { distToPolyline } from '../core/cityGenerator.js';
-import type { CityPlan, Vec2, VenuePlan, LandmarkPlan } from '../types.js';
+import type { BuskerPlan, CityPlan, Vec2, VenuePlan, LandmarkPlan } from '../types.js';
 
 /**
  * Street-level walking. WASD/arrow keys (or the on-screen stick on touch
@@ -9,7 +9,7 @@ import type { CityPlan, Vec2, VenuePlan, LandmarkPlan } from '../types.js';
  */
 
 const EYE = 1.5;
-const SPEED = 7;
+const SPEED = 8;
 const RADIUS = 0.8;
 
 interface Box {
@@ -23,6 +23,8 @@ export interface Nearby {
   venue: VenuePlan | null;
   venueDistance: number;
   landmark: LandmarkPlan | null;
+  busker: BuskerPlan | null;
+  buskerDistance: number;
 }
 
 export class WalkMode {
@@ -32,11 +34,11 @@ export class WalkMode {
   private keys = new Set<string>();
   private stick = new THREE.Vector2();
   private boxes: Box[] = [];
-  private cellSize = 15;
+  private cellSize = 18;
   private grid = new Map<string, Box[]>();
   private dragging: { x: number; y: number } | null = null;
   private lastNearCheck = 0;
-  private near: Nearby = { venue: null, venueDistance: Infinity, landmark: null };
+  private near: Nearby = { venue: null, venueDistance: Infinity, landmark: null, busker: null, buskerDistance: Infinity };
   private removers: (() => void)[] = [];
 
   constructor(
@@ -54,6 +56,8 @@ export class WalkMode {
       this.boxes.push(r ? { x: b.position.x, z: b.position.z, hw: r, hd: r } : { x: b.position.x, z: b.position.z, hw: b.width / 2, hd: b.depth / 2 });
     }
     for (const v of plan.venues) this.boxes.push({ x: v.position.x, z: v.position.z, hw: v.footprint * 0.45, hd: v.footprint * 0.42 });
+    for (const t of plan.labels) this.boxes.push({ x: t.position.x, z: t.position.z, hw: 5.2, hd: 5.2 });
+    for (const b of plan.buskers) this.boxes.push({ x: b.position.x, z: b.position.z, hw: 0.7, hd: 0.7 });
     for (const l of plan.landmarks) {
       if (l.model === 'boat') continue;
       this.boxes.push({ x: l.position.x, z: l.position.z, hw: l.footprint * 0.33, hd: l.footprint * 0.3 });
@@ -136,7 +140,7 @@ export class WalkMode {
     this.camera.updateProjectionMatrix();
     this.active = true;
     this.lastNearCheck = 0;
-    this.near = { venue: null, venueDistance: Infinity, landmark: null };
+    this.near = { venue: null, venueDistance: Infinity, landmark: null, busker: null, buskerDistance: Infinity };
     this.bind();
     this.applyRotation();
   }
@@ -148,7 +152,7 @@ export class WalkMode {
     this.removers.forEach((r) => r());
     this.removers = [];
     this.camera.near = 0.5;
-    this.camera.far = 2500;
+    this.camera.far = 4000;
     this.camera.fov = 38;
     this.camera.updateProjectionMatrix();
   }
@@ -249,10 +253,20 @@ export class WalkMode {
       for (const l of this.plan.landmarks) {
         if (Math.hypot(l.position.x - p.x, l.position.z - p.z) < 14) lm = l;
       }
+      let bk: BuskerPlan | null = null;
+      let bkD = Infinity;
+      for (const b of this.plan.buskers) {
+        const d = Math.hypot(b.position.x - p.x, b.position.z - p.z);
+        if (d < bkD) {
+          bkD = d;
+          bk = b;
+        }
+      }
       const venue = bestD < 24 ? best : null;
-      const changed = venue?.id !== this.near.venue?.id || lm?.id !== this.near.landmark?.id;
-      this.near = { venue, venueDistance: bestD, landmark: lm };
-      if (changed || venue) this.onNearby(this.near);
+      const busker = bkD < 14 ? bk : null;
+      const changed = venue?.id !== this.near.venue?.id || lm?.id !== this.near.landmark?.id || busker?.id !== this.near.busker?.id;
+      this.near = { venue, venueDistance: bestD, landmark: lm, busker, buskerDistance: bkD };
+      if (changed || venue || busker) this.onNearby(this.near);
     }
   }
 }

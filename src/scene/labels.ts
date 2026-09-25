@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-export type LabelKind = 'district' | 'mixed' | 'landmark' | 'venue';
+export type LabelKind = 'district' | 'mixed' | 'landmark' | 'venue' | 'label' | 'busker';
 
 interface Label {
   el: HTMLElement;
@@ -58,7 +58,7 @@ export class LabelLayer {
 
   update(camera: THREE.PerspectiveCamera, target: THREE.Vector3, width: number, height: number, walking = false): void {
     const camDist = camera.position.distanceTo(target);
-    const walkRange: Record<LabelKind, number> = { district: 150, mixed: 0, landmark: 70, venue: 45 };
+    const walkRange: Record<LabelKind, number> = { district: 150, mixed: 0, landmark: 70, venue: 45, label: 160, busker: 22 };
     for (const l of this.labels) {
       const inRange = walking
         ? camera.position.distanceTo(l.pos) < walkRange[l.kind] && !this.dimmed
