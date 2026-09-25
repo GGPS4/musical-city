@@ -22,7 +22,7 @@ test('catalogue relationships and landmark artists all resolve', () => {
     for (const id of l.artistIds) assert.ok(ARTIST_BY_ID[id], `${l.id} → unknown artist ${id}`);
     assert.ok(l.date && l.place && l.description, `${l.id} needs date, place and description`);
     assert.ok(l.soundtrack.songs.length >= 2, `${l.id} needs a soundtrack`);
-    for (const s of l.soundtrack.songs) assert.ok(ARTIST_BY_ID[s.artistId], `${l.id} soundtrack → unknown artist ${s.artistId}`);
+    for (const s of l.soundtrack.songs) assert.ok(s.artistName || (s.artistId && ARTIST_BY_ID[s.artistId]), `${l.id} soundtrack → unknown artist ${s.artistId}`);
     if (l.soundtrack.album) assert.ok(ARTIST_BY_ID[l.soundtrack.album.artistId]);
   }
   for (const g of GENRE_IDS) for (const r of GENRES[g].relatedGenres) assert.ok(GENRES[r]);
@@ -123,7 +123,7 @@ test('rock, indie and punk expansion resolves and builds its own districts', () 
   }
   assert.equal(matchTerm('Indie')?.id, 'indie');
   assert.equal(matchTerm('Hard Rock')?.id, 'hard-rock');
-  assert.equal(matchTerm('metal')?.id, 'hard-rock');
+  assert.equal(matchTerm('metal')?.id, 'metal');
   assert.ok(ARTISTS.length >= 90);
   const plan = generateCity(resolveTaste(["Guns N' Roses", 'Arctic Monkeys', 'Queens of the Stone Age', 'Indie']));
   const genres = plan.districts.map((d) => d.genre);
@@ -132,4 +132,62 @@ test('rock, indie and punk expansion resolves and builds its own districts', () 
   assert.ok(plan.landmarks.some((l) => l.id === 'arctic-grapes'));
   assert.ok(plan.landmarks.some((l) => l.model === 'flying-v'));
   assert.ok(plan.landmarks.some((l) => l.model === 'cassette'));
+});
+
+test('new genres: metal, hip hop, jazz, soul, reggae and pop each build a district with a monument', async () => {
+  const { GENRES } = await import('../src/data/genres.js');
+  for (const g of ['metal', 'hip-hop', 'jazz', 'soul', 'reggae', 'pop'] as const) {
+    assert.ok(GENRES[g], g);
+    const plan = generateCity(resolveTaste([GENRES[g].name]));
+    assert.equal(plan.districts[0].genre, g);
+    assert.ok(plan.landmarks.some((l) => l.id === `monument-${g}`), `${g} monument`);
+  }
+  for (const [name, genre] of [['Nas', 'hip-hop'], ['Miles Davis', 'jazz'], ['Bob Marley', 'reggae'], ['Aretha Franklin', 'soul'], ['Iron Maiden', 'metal'], ['Beyoncé', 'pop']] as const) {
+    const t = resolveTaste([name]);
+    assert.equal(t.artists[0]?.genres[0], genre, name);
+  }
+  const plan = generateCity(resolveTaste(['Miles Davis', 'Bob Marley']));
+  assert.ok(plan.landmarks.some((l) => l.id === 'kind-of-blue'));
+  assert.ok(plan.landmarks.some((l) => l.id === 'hope-road'));
+});
+
+test('compare: overlap score, shared genres and ownership', async () => {
+  const { compareTastes, mergeTastes } = await import('../src/core/compare.js');
+  const a = resolveTaste(['The Clash', 'Joy Division', 'Punk']);
+  const b = resolveTaste(['Sex Pistols', 'The Clash', 'Punk', 'Miles Davis']);
+  const c = compareTastes(a, b, 'Ben', 'Alex');
+  assert.ok(c.score > 40 && c.score <= 100, `score ${c.score}`);
+  assert.deepEqual(c.sharedArtists.map((x) => x.id), ['the-clash']);
+  assert.equal(c.owners.punk, 'shared');
+  assert.equal(c.owners.jazz, 'them');
+  const far = compareTastes(resolveTaste(['Metallica']), resolveTaste(['Miles Davis']));
+  assert.ok(far.score < c.score);
+  const merged = mergeTastes(a, b);
+  assert.equal(merged.artists.filter((x) => x.id === 'the-clash').length, 1);
+  const plan = generateCity(merged);
+  assert.ok(plan.districts.some((d) => d.genre === 'jazz'));
+});
+
+test('passport stamps landmarks and completes scenes', async () => {
+  const { Passport, SCENES } = await import('../src/core/passport.js');
+  const mem = new Map<string, string>();
+  const storage = { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => void mem.set(k, v) };
+  for (const s of SCENES) for (const id of s.landmarkIds) assert.ok(HISTORICAL_LANDMARKS.some((l) => l.id === id), `${s.id} → ${id}`);
+  const p = new Passport(storage);
+  assert.equal(p.stamp('beatles-cavern').isNew, true);
+  assert.equal(p.stamp('beatles-cavern').isNew, false);
+  p.stamp('beatles-abbey-road');
+  const res = p.stamp('beatles-rooftop');
+  assert.ok(res.completed.some((s) => s.id === 'beatlemania'));
+  assert.equal(new Passport(storage).count, 3);
+  assert.equal(p.stamp('not-a-landmark').isNew, false);
+});
+
+test('external genre tags map onto city genres', async () => {
+  const { genresFromTags } = await import('../src/music/artistLookup.js');
+  assert.equal(genresFromTags([{ name: 'hip hop', count: 5 }, { name: 'jazz rap', count: 1 }])[0], 'hip-hop');
+  assert.equal(genresFromTags([{ name: 'Hip-Hop/Rap' }])[0], 'hip-hop');
+  assert.equal(genresFromTags([{ name: 'thrash metal', count: 3 }])[0], 'metal');
+  assert.equal(genresFromTags([{ name: 'indie rock', count: 4 }, { name: 'rock', count: 1 }])[0], 'indie');
+  assert.deepEqual(genresFromTags([{ name: 'polka', count: 2 }]), []);
 });
