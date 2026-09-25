@@ -289,6 +289,44 @@ export interface TreePlan {
   genre: GenreId;
 }
 
+/** A real record label (facts), used for the label towers. */
+export interface RecordLabel {
+  id: string;
+  name: string;
+  founded: number;
+  city: string;
+  founders: string;
+  blurb: string;
+  /** Catalogue artists who released records on the label. */
+  artistIds: string[];
+  color: string;
+}
+
+export interface LabelTowerPlan {
+  id: string;
+  labelId: string;
+  name: string;
+  position: Vec2;
+  height: number;
+  color: string;
+  /** Artists on the label who are in this city. */
+  artistIds: string[];
+  genre: GenreId;
+}
+
+export type Instrument = 'guitar' | 'sax' | 'keys' | 'drums' | 'turntables' | 'mic' | 'violin' | 'bass' | 'trumpet';
+
+export interface BuskerPlan {
+  id: string;
+  /** Fictional stage name. */
+  name: string;
+  position: Vec2;
+  rotation: number;
+  artistId: string;
+  genre: GenreId;
+  instrument: Instrument;
+}
+
 export interface CityPlan {
   seed: number;
   size: number;
@@ -307,6 +345,8 @@ export interface CityPlan {
   trees: TreePlan[];
   lamps: Vec2[];
   connections: Connection[];
+  labels: LabelTowerPlan[];
+  buskers: BuskerPlan[];
   dna: GenreWeight[];
   artists: Artist[];
   /** Artists the user entered (ids). */
@@ -321,4 +361,6 @@ export type Selection =
   | { kind: 'artist'; id: string }
   | { kind: 'building'; id: number }
   | { kind: 'district'; genre: GenreId }
+  | { kind: 'label'; id: string }
+  | { kind: 'busker'; id: string }
   | null;

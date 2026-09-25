@@ -19,7 +19,8 @@ import { $, toast } from './ui/dom.js';
 import { Hud, type HudActions } from './ui/hud.js';
 import { DEMO_INPUT, Landing } from './ui/landing.js';
 import type { AppContext } from './app/context.js';
-import { createCompareController, createGigController, createPosterController, createWalkController, stampLandmark } from './app/features.js';
+import { createCompareController, createCrateController, createGigController, createMoodController, createPosterController, createWalkController, stampLandmark } from './app/features.js';
+import type { MoodId } from './scene/mood.js';
 
 function webglAvailable(): boolean {
   try {
@@ -130,6 +131,34 @@ function boot() {
         if (opts.fly !== false) scene.focus(center, Math.max(90, (d?.radius ?? 40) * 2.2), 0);
         break;
       }
+      case 'label': {
+        const t = plan.labels.find((x) => x.id === sel.id);
+        if (!t) return;
+        city.select(t.position, t.color, 8);
+        scene.highlightLabel('label', t.id);
+        const seen = new Set<string>();
+        const homes: Vec2[] = [];
+        for (const id of t.artistIds) {
+          for (const p of [...plan.venues.filter((v) => v.artistIds.includes(id)).map((v) => v.position), ...plan.landmarks.filter((l) => l.artistIds.includes(id)).map((l) => l.position)]) {
+            const k = `${p.x.toFixed(1)},${p.z.toFixed(1)}`;
+            if (!seen.has(k)) {
+              seen.add(k);
+              homes.push(p);
+            }
+          }
+        }
+        city.links(t.position, (city.towers.get(t.id)?.height ?? 40) - 2, homes, t.color);
+        if (opts.fly !== false) scene.focus(t.position, 190, 22);
+        break;
+      }
+      case 'busker': {
+        const b = plan.buskers.find((x) => x.id === sel.id);
+        if (!b) return;
+        city.select(b.position, GENRES[b.genre].style.neon[0], 2.6);
+        scene.highlightLabel('busker', b.id);
+        if (opts.fly !== false) scene.focus(b.position, 22, 1.5);
+        break;
+      }
       case 'building': {
         const b = plan.buildings.find((x) => x.id === sel.id);
         if (!b) return;
@@ -163,6 +192,7 @@ function boot() {
       p.set('them', friend.name);
       if (youName !== 'You') p.set('you', youName);
     }
+    if (scene.moodId !== 'night') p.set('mood', scene.moodId);
     return `${location.origin}${location.pathname}?${p.toString()}`;
   };
 
@@ -183,7 +213,7 @@ function boot() {
       const artists = artistIds.map(findArtist).filter((a): a is Artist => !!a && !a.custom);
       if (!artists.length) return;
       hud.setTracks(key, 'loading');
-      const result = await music.tracksForArtists(artists);
+      const result = await music.tracksForArtists(artists, artists.length === 1 ? 6 : 2);
       hud.setTracks(key, result);
       if (result.degraded) toast('Music data unavailable. Showing curated city data.', 'warn');
       if (result.tracks.some((t) => t.previewUrl)) player.playQueue(result.tracks);
@@ -295,6 +325,26 @@ function boot() {
     exitWalk: () => walk.exit(),
     openCompare: () => compareUi.open(),
     openPoster: () => void poster.open(),
+    tip(buskerId) {
+      const b = store.get().plan?.buskers.find((x) => x.id === buskerId);
+      if (!b) return;
+      const key = `busker:${b.id}`;
+      const artist = findArtist(b.artistId);
+      const current = player.current;
+      if (current && artist && current.artist.toLowerCase().includes(artist.name.toLowerCase().replace(/^the /, '')) && player.hasNext) {
+        player.next();
+        toast(`${b.name} tips their hat and plays another.`);
+      } else {
+        toast(`${b.name} tips their hat and strikes up a song by ${artist?.name ?? 'someone great'}.`);
+        void actions.listenAll(key, [b.artistId]);
+      }
+    },
+    openCrate: (id) => crate.open(id),
+    setMood(id) {
+      mood.set(id as MoodId, { play: true });
+      history.replaceState(null, '', shareUrl());
+    },
+    playMood: () => void mood.play(),
   };
 
   const hud = new Hud($('#hud'), actions);
@@ -364,6 +414,8 @@ function boot() {
     }
   };
 
+  const crate = createCrateController(ctx, (id) => actions.addArtist(id));
+  const mood = createMoodController(ctx);
   const compareUi = createCompareController((yours, f, you) => void build(yours, f, you));
 
   const buildComplete = () => {
@@ -388,6 +440,8 @@ function boot() {
   /* ---------------- start ---------------- */
 
   const params = new URLSearchParams(location.search);
+  const startMood = params.get('mood');
+  if (startMood) mood.set(startMood as MoodId, { instant: true });
   const sharedInputs = splitInput(params.get('city') ?? '');
   const withInputs = splitInput(params.get('with') ?? '');
   if (sharedInputs.length) {
