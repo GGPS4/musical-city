@@ -1,11 +1,14 @@
 import { ARTIST_BY_ID } from './data/artists.js';
 import { GENRES } from './data/genres.js';
 import { generateCity, introduceArtist } from './core/cityGenerator.js';
+import { compareTastes, mergeTastes, ownerLabel } from './core/compare.js';
 import { computeDna } from './core/dna.js';
+import { Passport } from './core/passport.js';
 import { mulberry32 } from './core/random.js';
 import { discoverArtist } from './core/recommend.js';
-import { resolveTaste, splitInput } from './core/resolve.js';
+import { resolveTaste, soundtrackArtist, splitInput, type ResolvedTaste } from './core/resolve.js';
 import { store, type Tab } from './core/store.js';
+import { lookupMany } from './music/artistLookup.js';
 import { MusicService, PreviewPlayer } from './music/musicService.js';
 import { TIMELINE } from './scene/buildings.js';
 import { CityScene } from './scene/CityScene.js';
@@ -15,6 +18,8 @@ import type { Artist, Selection, Vec2 } from './types.js';
 import { $, toast } from './ui/dom.js';
 import { Hud, type HudActions } from './ui/hud.js';
 import { DEMO_INPUT, Landing } from './ui/landing.js';
+import type { AppContext } from './app/context.js';
+import { createCompareController, createGigController, createPosterController, createWalkController, stampLandmark } from './app/features.js';
 
 function webglAvailable(): boolean {
   try {
@@ -23,6 +28,11 @@ function webglAvailable(): boolean {
   } catch {
     return false;
   }
+}
+
+interface Friend {
+  name: string;
+  inputs: string[];
 }
 
 function boot() {
@@ -34,14 +44,19 @@ function boot() {
 
   const music = new MusicService();
   const player = new PreviewPlayer();
+  const passport = new Passport();
   const rng = mulberry32(Date.now() & 0xffffffff);
   const discovered = new Set<string>();
+  let friend: Friend | null = null;
+  let youName = 'You';
+  let notices: string[] = [];
 
   const scene = new CityScene($('#stage'), $('#labels'), {
     onPick: (hit) => handlePick(hit),
     onLabel: (kind, id) => handleLabel(kind, id),
     onBuildProgress: (t) => hud.buildProgress(t, TIMELINE.done),
     onBuildComplete: () => buildComplete(),
+    onNearby: (n) => walk.onNearby(n),
   });
 
   const setPhase = (phase: 'landing' | 'building' | 'city') => {
@@ -49,12 +64,15 @@ function boot() {
     app.dataset.phase = phase;
   };
 
+  const findArtist = (id: string): Artist | undefined => ARTIST_BY_ID[id] ?? store.get().plan?.artists.find((a) => a.id === id);
+
   /* ---------------- selection ---------------- */
 
   const select = (sel: Selection, opts: { fly?: boolean } = {}) => {
     const plan = store.get().plan;
     const city = scene.currentCity;
     if (!plan || !city) return;
+    if (sel && scene.walking && opts.fly !== false) walk.exit();
     store.set({ selection: sel });
     hud.renderInfo(sel);
     scene.setViewShift(sel && window.matchMedia('(max-width: 760px)').matches ? 0.24 : 0);
@@ -89,7 +107,7 @@ function boot() {
           ...plan.venues.filter((v) => v.artistIds.includes(sel.id)).map((v) => v.position),
           ...plan.landmarks.filter((l) => l.artistIds.includes(sel.id)).map((l) => l.position),
         ];
-        const a = ARTIST_BY_ID[sel.id];
+        const a = findArtist(sel.id);
         const color = a?.genres[0] ? GENRES[a.genres[0]].style.neon[0] : '#ffd27a';
         city.select(null);
         city.beams(places, color);
@@ -126,14 +144,26 @@ function boot() {
       if (store.get().selection) select(null);
       return;
     }
+    const fly = !scene.walking;
     if (hit.kind === 'building') select({ kind: 'building', id: Number(hit.id) }, { fly: false });
-    else select({ kind: hit.kind, id: String(hit.id) }, { fly: true });
+    else select({ kind: hit.kind, id: String(hit.id) }, { fly });
   };
 
   const handleLabel = (kind: LabelKind, id: string) => {
-    if (kind === 'district') select({ kind: 'district', genre: id as keyof typeof GENRES }, { fly: true });
-    else if (kind === 'mixed') select({ kind: 'district', genre: id.split('|')[0] as keyof typeof GENRES }, { fly: true });
-    else select({ kind, id }, { fly: true });
+    const fly = !scene.walking;
+    if (kind === 'district') select({ kind: 'district', genre: id as keyof typeof GENRES }, { fly });
+    else if (kind === 'mixed') select({ kind: 'district', genre: id.split('|')[0] as keyof typeof GENRES }, { fly });
+    else select({ kind, id }, { fly });
+  };
+
+  const shareUrl = () => {
+    const p = new URLSearchParams({ city: store.get().inputs.join(', ') });
+    if (friend) {
+      p.set('with', friend.inputs.join(', '));
+      p.set('them', friend.name);
+      if (youName !== 'You') p.set('you', youName);
+    }
+    return `${location.origin}${location.pathname}?${p.toString()}`;
   };
 
   /* ---------------- actions ---------------- */
@@ -141,30 +171,37 @@ function boot() {
   const actions: HudActions = {
     select,
     async listen(artistId) {
-      const artist = ARTIST_BY_ID[artistId] ?? store.get().plan?.artists.find((a) => a.id === artistId);
+      const artist = findArtist(artistId);
       if (!artist) return;
       hud.setTracks(artistId, 'loading');
       const result = await music.tracksFor(artist);
       hud.setTracks(artistId, result);
       if (result.degraded) toast('Music data unavailable. Showing curated city data.', 'warn');
-      const first = result.tracks.find((t) => t.previewUrl);
-      if (first) player.play(first);
+      if (result.tracks.some((t) => t.previewUrl)) player.playQueue(result.tracks);
     },
+    async listenAll(key, artistIds) {
+      const artists = artistIds.map(findArtist).filter((a): a is Artist => !!a && !a.custom);
+      if (!artists.length) return;
+      hud.setTracks(key, 'loading');
+      const result = await music.tracksForArtists(artists);
+      hud.setTracks(key, result);
+      if (result.degraded) toast('Music data unavailable. Showing curated city data.', 'warn');
+      if (result.tracks.some((t) => t.previewUrl)) player.playQueue(result.tracks);
+    },
+    nextTrack: () => void player.next(),
     async listenLandmark(landmarkId) {
       const l = store.get().plan?.landmarks.find((x) => x.id === landmarkId);
       if (!l?.soundtrack) return;
       const key = `lm:${l.id}`;
-      const songs = l.soundtrack.songs
-        .map((s) => ({ artist: ARTIST_BY_ID[s.artistId], title: s.title.replace(/[“”]/g, '') }))
-        .filter((s): s is { artist: Artist; title: string } => !!s.artist);
+      const songs = l.soundtrack.songs.map((s) => ({ artist: soundtrackArtist(s), title: s.title.replace(/[“”]/g, '') }));
       hud.setTracks(key, 'loading');
       const result = await music.tracksForSongs(key, songs);
       hud.setTracks(key, result);
       if (result.degraded) toast('Music data unavailable. Showing curated city data.', 'warn');
-      const first = result.tracks.find((t) => t.previewUrl);
-      if (first) player.play(first);
+      if (result.tracks.some((t) => t.previewUrl)) player.playQueue(result.tracks);
+      stampLandmark(ctx, l.id);
     },
-    playTrack: (t) => player.play(t),
+    playTrack: (t, queue) => (queue ? player.playQueue(queue, queue.indexOf(t)) : player.play(t)),
     togglePlayer: () => player.toggle(),
     stopPlayer: () => player.stop(),
     addArtist(artistId) {
@@ -181,7 +218,7 @@ function boot() {
       city.introduceVenue(intro.venue, intro.removedBuilding, intro.connections);
       scene.onVenueAdded(intro.venue.id);
       if (!plan.userArtistIds.includes(artist.id)) plan.userArtistIds.push(artist.id);
-      const userArtists = plan.userArtistIds.map((id) => ARTIST_BY_ID[id]).filter((a): a is Artist => !!a);
+      const userArtists = plan.userArtistIds.map(findArtist).filter((a): a is Artist => !!a && !a.custom);
       plan.dna = computeDna(userArtists, plan.userGenreIds, plan.unknownInputs.length);
       store.set({ planVersion: store.get().planVersion + 1 });
       hud.renderDna();
@@ -208,23 +245,28 @@ function boot() {
       void actions.listen(a.id);
     },
     overview() {
+      walk.exit();
       select(null);
       scene.overview();
     },
     newCity() {
+      walk.exit();
+      gig.end();
       player.stop();
       select(null);
       actions.toggleList(false);
+      friend = null;
+      store.set({ compare: null });
       setPhase('landing');
       scene.setAmbient(true);
       history.replaceState(null, '', location.pathname);
       landing.show(store.get().inputs);
     },
     async share() {
-      const url = `${location.origin}${location.pathname}?city=${encodeURIComponent(store.get().inputs.join(', '))}`;
+      const url = shareUrl();
       try {
         await navigator.clipboard.writeText(url);
-        toast('Link copied. Anyone who opens it gets the same city.');
+        toast(friend ? 'Link copied. It rebuilds your shared city.' : 'Link copied. Anyone who opens it gets the same city.');
       } catch {
         history.replaceState(null, '', url);
         toast('The link to your city is in the address bar.');
@@ -243,64 +285,113 @@ function boot() {
       store.set({ listOpen: next });
       hud.setTab(store.get().tab, next);
     },
+    startGig: (kind, id) => gig.start(kind, id),
+    nextAct: () => gig.next(),
+    endGig: () => gig.end(),
+    walk: (kind, id) => {
+      gig.end();
+      walk.enter(kind, id);
+    },
+    exitWalk: () => walk.exit(),
+    openCompare: () => compareUi.open(),
+    openPoster: () => void poster.open(),
   };
 
   const hud = new Hud($('#hud'), actions);
+  hud.passport = passport;
+  hud.hasNext = () => player.hasNext;
   player.subscribe((s) => hud.renderPlayer(s));
+
+  const ctx: AppContext = { scene, hud, music, player, passport, select };
+  const gig = createGigController(ctx);
+  const walk = createWalkController(ctx);
+  const poster = createPosterController(ctx, shareUrl, () =>
+    friend ? [`${youName}: ${store.get().inputs.join(', ')}.`, `${friend.name}: ${friend.inputs.join(', ')}.`] : store.get().inputs,
+  );
 
   /* ---------------- building ---------------- */
 
-  const build = (inputs: string[]) => {
+  /** Resolves inputs, looking up names outside the catalogue on MusicBrainz. */
+  const resolveWithLookup = async (inputs: string[], who?: string): Promise<ResolvedTaste> => {
+    const taste = resolveTaste(inputs);
+    if (!taste.unknown.length) return taste;
+    const res = await lookupMany(taste.unknown, (n) => hud.buildStatus(`Looking up ${n}${who ? ` for ${who}` : ''}…`));
+    for (const a of res.found) if (!taste.artists.some((x) => x.id === a.id)) taste.artists.push(a);
+    taste.unknown = res.notFound;
+    if (res.found.length) notices.push(`Found ${res.found.map((a) => a.name).join(', ')} on ${res.found[0].source ?? 'MusicBrainz'}.`);
+    if (res.failed) notices.push('Couldn’t reach the music database, so some names appear as musical interpretations.');
+    return taste;
+  };
+
+  const build = async (inputs: string[], withFriend: Friend | null = null, name = 'You') => {
+    walk.exit();
+    gig.end();
     player.stop();
-    store.set({ inputs, selection: null, listOpen: false });
+    friend = withFriend;
+    youName = name;
+    notices = [];
+    store.set({ inputs, selection: null, listOpen: false, compare: null });
     setPhase('building');
     landing.hide();
     hud.showBuild(true);
     hud.buildProgress(0, TIMELINE.done);
-    history.replaceState(null, '', `${location.pathname}?city=${encodeURIComponent(inputs.join(', '))}`);
-    // Let the overlay paint before generating.
-    setTimeout(() => {
-      try {
-        const taste = resolveTaste(inputs);
-        const plan = generateCity(taste);
-        store.set({ plan });
-        hud.mount(plan);
-        hud.setTab(store.get().tab, false);
-        scene.setAmbient(false);
-        scene.setCity(plan, true);
-      } catch (err) {
-        console.error(err);
-        hud.showBuild(false);
-        setPhase('landing');
-        landing.show(inputs);
-        toast('Something went wrong while building. Please try again.', 'warn');
+    history.replaceState(null, '', shareUrl());
+    await new Promise((r) => setTimeout(r, 80));
+    try {
+      const yours = await resolveWithLookup(inputs);
+      let taste = yours;
+      let compare = null;
+      if (withFriend) {
+        const theirs = await resolveWithLookup(withFriend.inputs, withFriend.name);
+        taste = mergeTastes(yours, theirs);
+        compare = compareTastes(yours, theirs, name, withFriend.name);
       }
-    }, 80);
+      const plan = generateCity(taste);
+      store.set({ plan, compare });
+      hud.compare = compare;
+      hud.mount(plan);
+      hud.setTab(store.get().tab, false);
+      scene.setAmbient(false);
+      const subs: Record<string, string> = {};
+      if (compare) for (const d of plan.districts) subs[d.genre] = ownerLabel(compare, d.genre);
+      scene.setCity(plan, true, subs);
+    } catch (err) {
+      console.error(err);
+      hud.showBuild(false);
+      setPhase('landing');
+      landing.show(inputs);
+      toast('Something went wrong while building. Please try again.', 'warn');
+    }
   };
+
+  const compareUi = createCompareController((yours, f, you) => void build(yours, f, you));
 
   const buildComplete = () => {
     hud.showBuild(false);
     setPhase('city');
     const plan = store.get().plan;
-    if (plan?.unknownInputs.length) {
-      toast(`We couldn’t find ${plan.unknownInputs.join(', ')} in our catalogue, so they appear as musical interpretations.`, 'warn', 6500);
-    }
+    const compare = store.get().compare;
+    const messages = [...notices];
+    if (plan?.unknownInputs.length) messages.push(`We couldn’t find ${plan.unknownInputs.join(', ')}, so they appear as musical interpretations.`);
+    if (compare) messages.unshift(`${compare.youName} and ${compare.themName}: ${compare.score}% taste overlap.`);
+    messages.forEach((m, i) => setTimeout(() => toast(m, m.startsWith('Couldn’t') || m.startsWith('We couldn’t') ? 'warn' : 'info', 5500), i * 5800));
     const hint = $('#hint');
     hint.classList.add('is-visible');
     setTimeout(() => hint.classList.remove('is-visible'), 7000);
   };
 
-  const landing = new Landing($('#landing'), build);
+  const landing = new Landing($('#landing'), (inputs) => void build(inputs));
 
   // Handy for debugging and automated checks in the browser console.
-  (window as unknown as { musicalCity: unknown }).musicalCity = { scene, store, select };
+  (window as unknown as { musicalCity: unknown }).musicalCity = { scene, store, select, passport, actions };
 
   /* ---------------- start ---------------- */
 
-  const shared = new URLSearchParams(location.search).get('city');
-  const sharedInputs = shared ? splitInput(shared) : [];
+  const params = new URLSearchParams(location.search);
+  const sharedInputs = splitInput(params.get('city') ?? '');
+  const withInputs = splitInput(params.get('with') ?? '');
   if (sharedInputs.length) {
-    build(sharedInputs);
+    void build(sharedInputs, withInputs.length ? { name: params.get('them') || 'Friend', inputs: withInputs } : null, params.get('you') || 'You');
   } else {
     const plan = generateCity(resolveTaste(DEMO_INPUT));
     scene.setCity(plan, false);

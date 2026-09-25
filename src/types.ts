@@ -16,7 +16,13 @@ export type GenreId =
   | 'new-wave'
   | 'art-rock'
   | 'hard-rock'
-  | 'indie';
+  | 'indie'
+  | 'metal'
+  | 'hip-hop'
+  | 'jazz'
+  | 'soul'
+  | 'reggae'
+  | 'pop';
 
 export interface Song {
   title: string;
@@ -44,6 +50,8 @@ export interface Artist {
   aliases?: string[];
   /** True for names the user typed that are not in the curated catalogue. */
   custom?: boolean;
+  /** Where a non-catalogue artist's data came from (e.g. MusicBrainz). */
+  source?: string;
 }
 
 /** Building archetypes the generator can place. */
@@ -114,7 +122,12 @@ export type MonumentKind =
   | 'synth-pavilion'
   | 'gallery-cube'
   | 'flying-v'
-  | 'cassette';
+  | 'cassette'
+  | 'anvil'
+  | 'boombox'
+  | 'saxophone'
+  | 'golden-record'
+  | 'sound-system';
 
 export type LandmarkModel =
   | 'rooftop-stage'
@@ -135,7 +148,8 @@ export type LandmarkModel =
 /** Music tied to a landmark: the album/songs connected to that place or event. */
 export interface Soundtrack {
   album?: { title: string; year: number; artistId: string };
-  songs: { title: string; artistId: string }[];
+  /** `artistId` for catalogue artists, or `artistName` for records by someone outside it. */
+  songs: { title: string; artistId?: string; artistName?: string }[];
   /** Short note on how the music relates to the place. */
   note: string;
 }
