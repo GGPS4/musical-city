@@ -192,6 +192,61 @@ test('external genre tags map onto city genres', async () => {
   assert.deepEqual(genresFromTags([{ name: 'polka', count: 2 }]), []);
 });
 
+test('record labels are real, resolve to catalogue artists, and get towers in matching cities', async () => {
+  const { RECORD_LABELS, labelsFor } = await import('../src/data/labels.js');
+  const ids = new Set<string>();
+  for (const l of RECORD_LABELS) {
+    assert.ok(!ids.has(l.id), `duplicate label ${l.id}`);
+    ids.add(l.id);
+    assert.ok(l.founded > 1880 && l.founded < 2010 && l.city && l.founders && l.blurb, l.id);
+    for (const a of l.artistIds) assert.ok(ARTIST_BY_ID[a], `${l.id} → unknown artist ${a}`);
+  }
+  assert.ok(labelsFor('bob-marley').some((l) => l.id === 'island'));
+  assert.ok(labelsFor('joy-division').some((l) => l.id === 'factory'));
+  const plan = generateCity(resolveTaste(['Bob Marley', 'Nirvana', 'Joy Division']));
+  const names = plan.labels.map((t) => t.labelId);
+  for (const id of ['island', 'sub-pop', 'factory']) assert.ok(names.includes(id), `expected ${id} tower`);
+  const cityIds = new Set(plan.artists.map((a) => a.id));
+  for (const t of plan.labels) {
+    const label = RECORD_LABELS.find((l) => l.id === t.labelId)!;
+    assert.ok(t.artistIds.length && t.artistIds.every((a) => label.artistIds.includes(a) && cityIds.has(a)), t.id);
+    // Towers sit on their own block: no building, venue or landmark there.
+    assert.ok(!plan.buildings.some((b) => Math.abs(b.position.x - t.position.x) < 6 && Math.abs(b.position.z - t.position.z) < 6), `${t.id} overlaps a building`);
+    assert.ok(!plan.venues.some((v) => Math.hypot(v.position.x - t.position.x, v.position.z - t.position.z) < 6), `${t.id} overlaps a venue`);
+    assert.ok(!plan.landmarks.some((l) => Math.hypot(l.position.x - t.position.x, l.position.z - t.position.z) < 6), `${t.id} overlaps a landmark`);
+  }
+});
+
+test('buskers stand on open corners and play artists from their district', () => {
+  const plan = generateCity(resolveTaste(splitInput(DEMO)));
+  assert.ok(plan.buskers.length >= plan.districts.length, 'at least one busker per district');
+  for (const b of plan.buskers) {
+    const artist = ARTIST_BY_ID[b.artistId];
+    assert.ok(artist?.genres.includes(b.genre), `${b.id} plays ${b.artistId}`);
+    assert.ok(!plan.buildings.some((x) => Math.abs(b.position.x - x.position.x) < x.width / 2 && Math.abs(b.position.z - x.position.z) < x.depth / 2), `${b.id} inside a building`);
+  }
+  assert.equal(new Set(plan.buskers.map((b) => b.name)).size, plan.buskers.length, 'unique stage names');
+});
+
+test('the city is big: more blocks, venues and landmarks than before', () => {
+  const plan = generateCity(resolveTaste(splitInput(DEMO)));
+  assert.ok(plan.grid >= 19 && plan.size >= 19 * 18, `size ${plan.size}`);
+  assert.ok(plan.buildings.length > 1200, `${plan.buildings.length} buildings`);
+  assert.ok(plan.venues.length >= 25, `${plan.venues.length} venues`);
+});
+
+test('record store crates hold the store’s artists first, filed by genre then A–Z', async () => {
+  const { crateFor } = await import('../src/core/crate.js');
+  const plan = generateCity(resolveTaste(splitInput(DEMO)));
+  const store = plan.venues.find((v) => v.type === 'record-store')!;
+  const crate = crateFor(plan, store.id);
+  assert.ok(crate.length >= 8 && crate.length <= 18);
+  for (const id of store.artistIds) if (ARTIST_BY_ID[id]?.album.title) assert.ok(crate.some((r) => r.artist.id === id), `store artist ${id} in crate`);
+  assert.equal(new Set(crate.map((r) => r.artist.id)).size, crate.length, 'no duplicates');
+  assert.ok(crate.every((r) => r.title === r.artist.album.title), 'sleeves show the real signature album');
+  assert.deepEqual(crateFor(plan, store.id), crate, 'deterministic');
+});
+
 test('song titles de-duplicate across remasters and spellings', async () => {
   const { songKey } = await import('../src/music/musicService.js');
   assert.equal(songKey('Anarchy in the U.K.'), songKey('Anarchy In The UK (Remastered 2007)'));
