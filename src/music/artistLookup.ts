@@ -13,7 +13,7 @@ import type { Artist, GenreId } from '../types.js';
  * and we stay well inside MusicBrainz's rate limits.
  */
 
-const CACHE_KEY = 'musical-city:lookup:v1';
+const CACHE_KEY = 'musical-city:lookup:v2';
 const MB = 'https://musicbrainz.org/ws/2';
 
 interface MbTag {
@@ -84,7 +84,9 @@ export function genresFromTags(tags: MbTag[]): GenreId[] {
   const score = new Map<GenreId, number>();
   for (const t of tags) {
     const tag = normalize(t.name);
-    const weight = Math.max(1, t.count ?? 1);
+    // Broad tags like "rock" or "pop" count for less than specific ones.
+    const generic = ['rock', 'pop', 'music', 'alternative'].includes(tag) ? 0.4 : 1;
+    const weight = Math.max(1, t.count ?? 1) * generic;
     for (const id of GENRE_IDS) {
       const g = GENRES[id];
       const keys = [g.name, ...g.aliases].map(normalize);
@@ -125,6 +127,7 @@ interface ItunesRow {
   primaryGenreName?: string;
   collectionName?: string;
   releaseDate?: string;
+  trackCount?: number;
   trackName?: string;
   kind?: string;
   wrapperType?: string;
@@ -139,7 +142,9 @@ async function fromItunes(name: string, signal?: AbortSignal) {
     getJson<{ results?: ItunesRow[] }>(`https://itunes.apple.com/search?${params('song', 15)}`, signal),
   ]);
   const mine = (r: ItunesRow) => normalize(r.artistName ?? '') === want;
-  const album = (albums.results ?? []).find(mine);
+  // Prefer a proper album over singles and EPs.
+  const own = (albums.results ?? []).filter(mine);
+  const album = own.find((a) => (a.trackCount ?? 0) >= 7 && !/ - (single|ep)$/i.test(a.collectionName ?? '')) ?? own.find((a) => !/ - single$/i.test(a.collectionName ?? '')) ?? own[0];
   const songRows = (songs.results ?? []).filter((r) => mine(r) && r.trackName);
   const titles = [...new Set(songRows.map((r) => r.trackName as string))].slice(0, 3);
   const genre = album?.primaryGenreName ?? songRows[0]?.primaryGenreName;
@@ -188,7 +193,8 @@ export async function lookupArtist(name: string, signal?: AbortSignal): Promise<
   let genres = genresFromTags(tags);
   if (!genres.length) genres = ['alternative'];
   const origin = mb?.['begin-area']?.name ?? mb?.area?.name ?? 'Unknown';
-  const since = Number(mb?.['life-span']?.begin?.slice(0, 4)) || 0;
+  // For a person, MusicBrainz's "begin" is a birth date, not the start of their career.
+  const since = mb?.type === 'Person' ? 0 : Number(mb?.['life-span']?.begin?.slice(0, 4)) || 0;
   const relNames = (mb?.relations ?? []).map((r) => r.artist?.name ?? '').filter(Boolean);
   const displayName = mb?.name ?? it?.canonicalName ?? name;
   const tagText = tags

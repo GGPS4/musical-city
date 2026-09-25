@@ -42,6 +42,11 @@ interface ItunesResult {
   kind?: string;
 }
 
+/** Title key that treats "Anarchy in the U.K." and "Anarchy In The UK (Remastered 2007)" as the same song. */
+export function songKey(title: string): string {
+  return normalize(title.replace(/\s*[([].*?[)\]]/g, '').replace(/\s+-\s+.*(remaster|version|mix|mono|stereo|live|edit).*$/i, ''));
+}
+
 export class ItunesPreviewProvider implements MusicProvider {
   readonly id = 'itunes';
   readonly label = 'Apple Music previews';
@@ -65,7 +70,7 @@ export class ItunesPreviewProvider implements MusicProvider {
       if (r.kind !== 'song' || !r.previewUrl || !r.trackName) continue;
       const got = normalize(r.artistName ?? '');
       if (got !== want && !aliases.includes(got) && !got.startsWith(want)) continue;
-      const key = normalize(r.trackName);
+      const key = songKey(r.trackName);
       if (seen.has(key)) continue;
       seen.add(key);
       tracks.push({
