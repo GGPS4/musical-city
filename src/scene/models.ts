@@ -498,7 +498,10 @@ export function buildLandmark(l: LandmarkPlan): Model {
     case 'studio': {
       height = 5;
       tint(box(FACADES.glass(), 0, 0, 0, S * 0.7, height, S * 0.55, group), '#2b2f3a');
-      box(glow(neon, 2.4), 0, height, 0, S * 0.72, 0.12, S * 0.57, group, false);
+      // Neon outline around the roof edge.
+      for (const [sx, sz, lx, lz] of [[0, 1, 1, 0], [0, -1, 1, 0], [1, 0, 0, 1], [-1, 0, 0, 1]]) {
+        box(glow(neon, 2.4), (sx * S * 0.7) / 2, height, (sz * S * 0.55) / 2, lx ? S * 0.72 : 0.12, 0.12, lz ? S * 0.57 : 0.12, group, false);
+      }
       const dish = mesh(G().dome, MATS.white(), S * 0.2, height + 0.6, 0, 1.6, 0.5, 1.6, group);
       dish.rotation.x = -0.9;
       sign(l.name, neon, 0.75, group, 0, height - 0.9, S * 0.275 + 0.06, 'neon', S * 0.65);
@@ -644,6 +647,54 @@ export function buildLandmark(l: LandmarkPlan): Model {
       mesh(G().barrel, colored('#e0fbfc', 0.3, 0.2), 0, 1.5, -1.2, 9.5, 5, 2, group).material = new THREE.MeshStandardMaterial({ color: 0xe0fbfc, transparent: true, opacity: 0.35, roughness: 0.1 });
       ticks.push((t) => keys.forEach((k, i) => (k.emissiveIntensity = Math.max(0, Math.sin(t * 3 - i * 0.6)) * 1.4)));
       height = 4;
+      break;
+    }
+    case 'flying-v': {
+      box(MATS.stone(), 0, 0, 0, 5, 0.6, 3, group);
+      const guitar = new THREE.Group();
+      // V-shaped body standing on its wing tips, neck pointing at the sky.
+      const v = new THREE.Shape();
+      v.moveTo(0, 8.2);
+      v.lineTo(3.3, 0);
+      v.lineTo(1.9, 0);
+      v.lineTo(0, 4.4);
+      v.lineTo(-1.9, 0);
+      v.lineTo(-3.3, 0);
+      v.closePath();
+      const bodyGeo = new THREE.ExtrudeGeometry(v, { depth: 0.7, bevelEnabled: true, bevelSize: 0.12, bevelThickness: 0.12, bevelSegments: 2 });
+      bodyGeo.translate(0, 0, -0.35);
+      const body = new THREE.Mesh(bodyGeo, colored('#b3121b', 0.3, 0.35));
+      body.castShadow = true;
+      guitar.add(body);
+      box(colored('#2a1a12', 0.6), 0, 7.4, 0, 0.55, 8, 0.4, guitar);
+      box(colored('#1b1410', 0.6), 0, 15.3, 0, 1.2, 2.2, 0.35, guitar);
+      box(MATS.metal(), 0, 5.2, 0.42, 1.3, 0.45, 0.12, guitar);
+      box(MATS.metal(), 0, 6.3, 0.42, 1.3, 0.45, 0.12, guitar);
+      for (let i = 0; i < 6; i++) mesh(G().cylinderLow, glow('#ff3b30', 2.2), -0.22 + i * 0.088, 3.6, 0.46, 0.025, 11.8, 0.025, guitar, false);
+      guitar.position.y = 0.6;
+      group.add(guitar);
+      ticks.push((t) => (guitar.rotation.y = Math.sin(t * 0.3) * 0.4));
+      height = 17.5;
+      break;
+    }
+    case 'cassette': {
+      box(MATS.stone(), 0, 0, 0, 9, 0.5, 3, group);
+      const tape = new THREE.Group();
+      box(colored('#f2efe6', 0.6), 0, 0, 0, 8.4, 5.4, 1.2, tape);
+      box(colored('#f28482', 0.8), 0, 3.3, 0.62, 6.8, 1.4, 0.02, tape, false);
+      box(MATS.black(), 0, 1.2, 0.62, 5.4, 1.8, 0.02, tape, false);
+      for (const sx of [-1.5, 1.5]) {
+        const reel = new THREE.Group();
+        const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.3, 6), glow('#f9c74f', 1.6));
+        hub.rotation.x = Math.PI / 2;
+        reel.add(hub);
+        reel.position.set(sx, 2.1, 0.66);
+        tape.add(reel);
+        ticks.push((t) => (reel.rotation.z = -t * 1.4));
+      }
+      tape.position.y = 0.5;
+      group.add(tape);
+      height = 7;
       break;
     }
     case 'gallery-cube': {

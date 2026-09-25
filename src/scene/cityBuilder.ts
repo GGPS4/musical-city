@@ -144,7 +144,7 @@ export class CityView {
     shape.quadraticCurveTo(-half, -half, -half + r, -half);
     const slabGeo = new THREE.ExtrudeGeometry(shape, { depth: 5, bevelEnabled: true, bevelSize: 0.8, bevelThickness: 0.6, bevelSegments: 2 });
     slabGeo.rotateX(Math.PI / 2);
-    const slab = new THREE.Mesh(slabGeo, [MATS.asphalt(), std('slab-side', { color: 0x1d1c22, roughness: 0.9 })]);
+    const slab = new THREE.Mesh(slabGeo, [std('ground', { color: 0x0e1210, roughness: 1 }), std('slab-side', { color: 0x1d1c22, roughness: 0.9 })]);
     slab.position.y = -0.6;
     slab.receiveShadow = true;
     this.group.add(slab);
@@ -185,21 +185,58 @@ export class CityView {
     }
   }
 
+  /** Asphalt road strips, lane dashes and zebra crossings at busy junctions. */
   private buildRoadMarkings() {
-    const dash = this.instancer.batch('dash', geo().box, glow('#d8c690', 0.35), false, false);
+    const g = geo();
+    const road = this.instancer.batch('road', g.box, MATS.asphalt(), false, true);
+    const dash = this.instancer.batch('dash', g.box, glow('#d8c690', 0.35), false, false);
+    const zebra = this.instancer.batch('zebra', g.box, glow('#d9d6cc', 0.32), false, false);
     const half = this.plan.size / 2;
+    const w = this.plan.road;
+    const anim = (order: number, extra = 0) => ({
+      delay: this.animated ? TIMELINE.blocks + extra + order * 0.7 : 0,
+      duration: 0.35,
+      mode: this.animated ? ('pop' as const) : ('none' as const),
+    });
+    const junctions = new Map<string, { x: number; z: number; dirs: [number, number][] }>();
+    const junction = (x: number, z: number, dx: number, dz: number) => {
+      const key = `${x.toFixed(1)},${z.toFixed(1)}`;
+      const j = junctions.get(key) ?? { x, z, dirs: [] };
+      j.dirs.push([dx, dz]);
+      junctions.set(key, j);
+    };
+
     for (const r of this.plan.roads) {
       const len = Math.hypot(r.b.x - r.a.x, r.b.z - r.a.z);
       const alongX = Math.abs(r.b.x - r.a.x) > Math.abs(r.b.z - r.a.z);
-      for (let s = 2.2; s < len - 2; s += 2.4) {
-        const x = r.a.x + ((r.b.x - r.a.x) * s) / len;
-        const z = r.a.z + ((r.b.z - r.a.z) * s) / len;
-        const order = Math.hypot(x, z) / half;
-        dash.add(x, 0.005, z, alongX ? 1.1 : 0.12, 0.02, alongX ? 0.12 : 1.1, {
-          delay: this.animated ? TIMELINE.blocks + 0.3 + order * 0.7 : 0,
-          duration: 0.3,
-          mode: this.animated ? 'pop' : 'none',
-        });
+      const mx = (r.a.x + r.b.x) / 2;
+      const mz = (r.a.z + r.b.z) / 2;
+      const order = Math.hypot(mx, mz) / half;
+      // Extend by the road width so neighbouring strips fill the junctions.
+      road.add(mx, 0, mz, alongX ? len + w : w, 0.03, alongX ? w : len + w, anim(order, 0.05));
+      const ux = (r.b.x - r.a.x) / len;
+      const uz = (r.b.z - r.a.z) / len;
+      junction(r.a.x, r.a.z, ux, uz);
+      junction(r.b.x, r.b.z, -ux, -uz);
+      for (let s = w / 2 + 2; s < len - w / 2 - 1.2; s += 2.4) {
+        const x = r.a.x + ux * s;
+        const z = r.a.z + uz * s;
+        dash.add(x, 0.03, z, alongX ? 1.1 : 0.12, 0.015, alongX ? 0.12 : 1.1, anim(order, 0.3));
+      }
+    }
+
+    for (const j of junctions.values()) {
+      if (j.dirs.length < 3) continue;
+      const order = Math.hypot(j.x, j.z) / half;
+      for (const [dx, dz] of j.dirs) {
+        const d = w / 2 + 0.55;
+        const cx = j.x + dx * d;
+        const cz = j.z + dz * d;
+        const alongX = Math.abs(dx) > Math.abs(dz);
+        for (let k = -2; k <= 2; k++) {
+          const off = k * 0.6;
+          zebra.add(alongX ? cx : cx + off, 0.03, alongX ? cz + off : cz, alongX ? 0.8 : 0.32, 0.015, alongX ? 0.32 : 0.8, anim(order, 0.35));
+        }
       }
     }
   }
@@ -218,7 +255,8 @@ export class CityView {
       pos.push(p.x + (nx * width) / 2, y, p.z + (nz * width) / 2, p.x - (nx * width) / 2, y, p.z - (nz * width) / 2);
       if (i > 0) {
         const k = i * 2;
-        idx.push(k - 2, k - 1, k, k - 1, k + 1, k);
+        // Counter-clockwise from above so the surface faces up.
+        idx.push(k - 2, k, k - 1, k - 1, k, k + 1);
       }
     });
     const g = new THREE.BufferGeometry();
@@ -236,7 +274,7 @@ export class CityView {
     bank.receiveShadow = true;
     this.group.add(bank);
 
-    const water = new THREE.MeshStandardMaterial({ color: 0x0a1626, roughness: 0.18, metalness: 0.6, transparent: true, opacity: 0.35 });
+    const water = new THREE.MeshStandardMaterial({ color: 0x08121f, roughness: 0.32, metalness: 0.25, envMapIntensity: 0.35, transparent: true, opacity: 0.35 });
     water.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, cityUniforms);
       shader.vertexShader = shader.vertexShader
@@ -247,12 +285,14 @@ export class CityView {
         .replace(
           '#include <emissivemap_fragment>',
           `#include <emissivemap_fragment>
-          float w1 = sin(vWPos.x * 1.7 + uTime * 1.3) * sin(vWPos.z * 2.3 - uTime * 0.9);
-          float w2 = sin((vWPos.x + vWPos.z) * 3.1 - uTime * 1.7);
-          float spark = smoothstep(0.82, 1.0, w1 * 0.6 + w2 * 0.5);
-          vec3 refl = mix(vec3(1.0, 0.65, 0.3), vec3(0.4, 0.7, 1.0), step(0.0, sin(vWPos.x * 0.21)));
-          totalEmissiveRadiance += refl * spark * (0.35 + 0.9 * uLights);
-          totalEmissiveRadiance += vec3(0.02, 0.05, 0.09) * (0.5 + 0.5 * w2);`,
+          // Small drifting glints of city light on the water.
+          vec2 q = vWPos.xz;
+          float n1 = sin(q.x * 5.3 + uTime * 1.1) * sin(q.y * 6.1 - uTime * 0.8);
+          float n2 = sin((q.x - q.y) * 4.7 + uTime * 1.6);
+          float glint = smoothstep(0.93, 1.0, n1 * 0.65 + n2 * 0.4);
+          vec3 refl = mix(vec3(1.0, 0.7, 0.35), vec3(0.45, 0.7, 1.0), step(0.0, sin(q.x * 0.17 + q.y * 0.11)));
+          totalEmissiveRadiance += refl * glint * (0.15 + 0.7 * uLights);
+          totalEmissiveRadiance += vec3(0.01, 0.025, 0.045) * (0.7 + 0.3 * sin(q.x * 0.4 + uTime * 0.3));`,
         );
     };
     this.waterMat = water;
@@ -262,7 +302,7 @@ export class CityView {
   }
 
   private buildBridges() {
-    const deckMat = std('bridge', { color: 0x4a4540, roughness: 0.85 });
+    const deckMat = std('bridge', { color: 0x6a645c, roughness: 0.85 });
     const bulb = glow('#ffd9a0', 2.2);
     for (const b of this.plan.bridges) {
       const bridge = new THREE.Group();
