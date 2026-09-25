@@ -19,6 +19,23 @@ export interface Track {
   externalUrl?: string;
 }
 
+export interface AlbumInfo {
+  id: number;
+  title: string;
+  year: number;
+  artwork?: string;
+  tracks: number;
+}
+
+interface ItunesAlbum {
+  collectionId?: number;
+  collectionName?: string;
+  artistName?: string;
+  artworkUrl100?: string;
+  releaseDate?: string;
+  trackCount?: number;
+}
+
 export interface MusicProvider {
   readonly id: string;
   readonly label: string;
@@ -210,6 +227,83 @@ export class MusicService {
     }
   }
 
+  private albumCache = new Map<string, Promise<AlbumInfo[]>>();
+  private artCache = new Map<string, Promise<string | null>>();
+
+  /** An artist's albums from the iTunes Search API, oldest first, without remaster/deluxe duplicates. */
+  albumsFor(artist: Artist): Promise<AlbumInfo[]> {
+    const hit = this.albumCache.get(artist.id);
+    if (hit) return hit;
+    const job = (async () => {
+      const url = `https://itunes.apple.com/search?${new URLSearchParams({ term: artist.name, entity: 'album', attribute: 'artistTerm', limit: '40', country: 'US' })}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`iTunes album search failed: ${res.status}`);
+      const json = (await res.json()) as { results?: ItunesAlbum[] };
+      const want = normalize(artist.name);
+      const aliases = (artist.aliases ?? []).map(normalize);
+      const byKey = new Map<string, AlbumInfo>();
+      for (const r of json.results ?? []) {
+        const got = normalize(r.artistName ?? '');
+        if (!r.collectionId || !r.collectionName || (got !== want && !aliases.includes(got))) continue;
+        if ((r.trackCount ?? 0) < 6 || / - (single|ep)$/i.test(r.collectionName) || /greatest hits|best of|collection|anthology|essential|live at|\blive\b|karaoke|tribute/i.test(r.collectionName)) continue;
+        const key = songKey(r.collectionName.replace(/\b(deluxe|expanded|anniversary|remaster(ed)?|edition|version)\b/gi, ''));
+        const year = Number(r.releaseDate?.slice(0, 4)) || 0;
+        const prev = byKey.get(key);
+        // Keep the earliest release of each album, but a clean title wins.
+        if (!prev || (year && year < prev.year)) {
+          byKey.set(key, { id: r.collectionId, title: r.collectionName, year, artwork: r.artworkUrl100?.replace(/\/\d+x\d+bb\./, '/300x300bb.'), tracks: r.trackCount ?? 0 });
+        }
+      }
+      return [...byKey.values()].sort((a, b) => a.year - b.year).slice(0, 10);
+    })();
+    job.catch(() => this.albumCache.delete(artist.id));
+    this.albumCache.set(artist.id, job);
+    return job;
+  }
+
+  /** The songs (with previews) on one album. */
+  async albumTracks(album: AlbumInfo, artist: Artist): Promise<TrackResult> {
+    const key = `album:${album.id}`;
+    const cached = this.cache.get(key);
+    if (cached) return cached;
+    try {
+      const res = await fetch(`https://itunes.apple.com/lookup?${new URLSearchParams({ id: String(album.id), entity: 'song', country: 'US' })}`);
+      if (!res.ok) throw new Error(String(res.status));
+      const json = (await res.json()) as { results?: ItunesResult[] };
+      const tracks = (json.results ?? [])
+        .filter((r) => r.kind === 'song' && r.trackName)
+        .map((r) => ({ title: r.trackName!, artist: r.artistName ?? artist.name, album: r.collectionName, previewUrl: r.previewUrl, artworkUrl: r.artworkUrl100, externalUrl: r.trackViewUrl }));
+      const result = { tracks, source: 'Apple Music previews', degraded: false };
+      this.cache.set(key, result);
+      return result;
+    } catch {
+      return { tracks: [], source: 'Curated catalogue', degraded: true };
+    }
+  }
+
+  /** Large cover art URL for an album, or null. */
+  albumArt(artist: Artist, title: string): Promise<string | null> {
+    const key = `${artist.id}|${title}`;
+    const hit = this.artCache.get(key);
+    if (hit) return hit;
+    const job = (async () => {
+      try {
+        const url = `https://itunes.apple.com/search?${new URLSearchParams({ term: `${artist.name} ${title}`, entity: 'album', limit: '10', country: 'US' })}`;
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        const json = (await res.json()) as { results?: ItunesAlbum[] };
+        const want = normalize(artist.name);
+        const t = songKey(title);
+        const hitRow = (json.results ?? []).find((r) => normalize(r.artistName ?? '').startsWith(want) && (songKey(r.collectionName ?? '').startsWith(t) || t.startsWith(songKey(r.collectionName ?? ''))));
+        return hitRow?.artworkUrl100?.replace(/\/\d+x\d+bb\./, '/600x600bb.') ?? null;
+      } catch {
+        return null;
+      }
+    })();
+    this.artCache.set(key, job);
+    return job;
+  }
+
   constructor(
     private remote: MusicProvider | null = new ItunesPreviewProvider(),
     private fallback: MusicProvider = new CuratedProvider(),
@@ -255,7 +349,56 @@ export class PreviewPlayer {
   /** Tracks that play one after another (e.g. every act at a venue). */
   private queue: Track[] = [];
 
+  private audioCtx: AudioContext | null = null;
+  private analyser: AnalyserNode | null = null;
+  private bins: Uint8Array<ArrayBuffer> | null = null;
+
+  /**
+   * Routes playback through an analyser for the visualiser. Apple's preview
+   * files allow cross-origin reads, so this works on the real previews.
+   */
+  enableAnalysis(): boolean {
+    try {
+      if (!this.audioCtx) {
+        this.audioCtx = new AudioContext();
+        const src = this.audioCtx.createMediaElementSource(this.audio);
+        this.analyser = this.audioCtx.createAnalyser();
+        this.analyser.fftSize = 512;
+        this.analyser.smoothingTimeConstant = 0.72;
+        src.connect(this.analyser);
+        this.analyser.connect(this.audioCtx.destination);
+        this.bins = new Uint8Array(new ArrayBuffer(this.analyser.frequencyBinCount));
+      }
+      void this.audioCtx.resume();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Loudness per band (0–1), log-spaced from bass to treble. */
+  levels(bands: number): number[] {
+    const out = new Array<number>(bands).fill(0);
+    if (!this.analyser || !this.bins || this.audio.paused) return out;
+    this.analyser.getByteFrequencyData(this.bins);
+    const n = this.bins.length;
+    for (let b = 0; b < bands; b++) {
+      const lo = Math.floor(Math.pow(n * 0.7, b / bands));
+      const hi = Math.max(lo + 1, Math.floor(Math.pow(n * 0.7, (b + 1) / bands)));
+      let sum = 0;
+      for (let i = lo; i < hi; i++) sum += this.bins[i];
+      out[b] = Math.min(1, sum / (hi - lo) / 255) ** 1.6;
+    }
+    return out;
+  }
+
+  get playing(): boolean {
+    return !this.audio.paused && this.state.status !== 'idle';
+  }
+
   constructor() {
+    // Apple's preview CDN sends CORS headers, which lets the visualiser read the audio.
+    this.audio.crossOrigin = 'anonymous';
     this.audio.preload = 'none';
     this.audio.volume = 0.8;
     this.audio.addEventListener('timeupdate', () => this.progress());
