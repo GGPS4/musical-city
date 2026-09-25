@@ -473,6 +473,299 @@ export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
       note: "Songs from Dookie, the album they were touring.",
     },
   },
+  {
+    id: 'sedgwick-avenue',
+    name: "1520 Sedgwick Avenue",
+    type: 'historical',
+    artistIds: ["kool-herc"],
+    place: "Sedgwick Avenue, The Bronx, New York",
+    date: "11 August 1973",
+    description:
+      "DJ Kool Herc played a back-to-school party in the building’s rec room, stretching the instrumental breaks of funk records. It is widely cited as the birth of hip hop.",
+    model: 'hall',
+    soundtrack: {
+      songs: [{"title": "Apache", "artistName": "Incredible Bongo Band"}, {"title": "Give It Up or Turnit a Loose", "artistId": "james-brown"}, {"title": "Funky Drummer", "artistId": "james-brown"}],
+      note: "Breakbeat records of the kind Herc looped at his parties.",
+    },
+  },
+  {
+    id: 'def-jam-dorm',
+    name: "Weinstein Hall, NYU",
+    type: 'historical',
+    artistIds: ["ll-cool-j", "beastie-boys"],
+    place: "Washington Square, New York City",
+    date: "1984",
+    description:
+      "Rick Rubin started Def Jam from his NYU dorm room, soon joined by Russell Simmons. LL Cool J and the Beastie Boys were among the first artists.",
+    model: 'studio',
+    soundtrack: {
+      songs: [{"title": "I Need a Beat", "artistId": "ll-cool-j"}, {"title": "Rock Hard", "artistId": "beastie-boys"}, {"title": "Rock the Bells", "artistId": "ll-cool-j"}],
+      note: "Early Def Jam records.",
+    },
+  },
+  {
+    id: 'mintons',
+    name: "Minton’s Playhouse",
+    type: 'historical',
+    artistIds: ["thelonious-monk", "charlie-parker"],
+    place: "West 118th Street, Harlem",
+    date: "Early 1940s",
+    description:
+      "After-hours jam sessions here, with Thelonious Monk as house pianist, helped give birth to bebop.",
+    model: 'cellar-club',
+    soundtrack: {
+      songs: [{"title": "Epistrophy", "artistId": "thelonious-monk"}, {"title": "’Round Midnight", "artistId": "thelonious-monk"}, {"title": "Ornithology", "artistId": "charlie-parker"}],
+      note: "Bebop tunes from the Minton’s generation.",
+    },
+  },
+  {
+    id: 'birdland',
+    name: "Birdland",
+    type: 'historical',
+    artistIds: ["charlie-parker"],
+    place: "Broadway, New York City",
+    date: "Opened December 1949",
+    description:
+      "The jazz club named after Charlie Parker, “Bird”. George Shearing wrote “Lullaby of Birdland” for it.",
+    model: 'bowery-club',
+    soundtrack: {
+      songs: [{"title": "Now’s the Time", "artistId": "charlie-parker"}, {"title": "Ko-Ko", "artistId": "charlie-parker"}, {"title": "Lullaby of Birdland", "artistName": "George Shearing"}],
+      note: "Bird himself, and the song written for the club.",
+    },
+  },
+  {
+    id: 'village-vanguard',
+    name: "Village Vanguard",
+    type: 'historical',
+    artistIds: ["john-coltrane"],
+    place: "Seventh Avenue South, Greenwich Village",
+    date: "November 1961",
+    description:
+      "The basement club where John Coltrane recorded the live album released as “Live” at the Village Vanguard.",
+    model: 'cellar-club',
+    soundtrack: {
+      album: {"title": "“Live” at the Village Vanguard", "year": 1962, "artistId": "john-coltrane"},
+      songs: [{"title": "Chasin’ the Trane", "artistId": "john-coltrane"}, {"title": "Spiritual", "artistId": "john-coltrane"}, {"title": "Softly, as in a Morning Sunrise", "artistId": "john-coltrane"}],
+      note: "Recorded in the club over a run of nights in November 1961.",
+    },
+  },
+  {
+    id: 'kind-of-blue',
+    name: "30th Street Studio",
+    type: 'historical',
+    artistIds: ["miles-davis", "john-coltrane"],
+    place: "East 30th Street, New York City",
+    date: "March–April 1959",
+    description:
+      "Columbia’s church-turned-studio where Miles Davis’s sextet, with John Coltrane, recorded Kind of Blue in two sessions.",
+    model: 'studio',
+    soundtrack: {
+      album: {"title": "Kind of Blue", "year": 1959, "artistId": "miles-davis"},
+      songs: [{"title": "So What", "artistId": "miles-davis"}, {"title": "Blue in Green", "artistId": "miles-davis"}, {"title": "All Blues", "artistId": "miles-davis"}],
+      note: "The album recorded here.",
+    },
+  },
+  {
+    id: 'cotton-club',
+    name: "The Cotton Club",
+    type: 'historical',
+    artistIds: ["duke-ellington"],
+    place: "Harlem, New York City",
+    date: "1927–1931",
+    description:
+      "Duke Ellington’s orchestra was the house band, and radio broadcasts from the club made him famous.",
+    model: 'theater',
+    soundtrack: {
+      songs: [{"title": "Creole Love Call", "artistId": "duke-ellington"}, {"title": "The Mooche", "artistId": "duke-ellington"}, {"title": "East St. Louis Toodle-Oo", "artistId": "duke-ellington"}],
+      note: "Ellington recordings from his Cotton Club years.",
+    },
+  },
+  {
+    id: 'newport-1956',
+    name: "Newport Jazz Festival",
+    type: 'historical',
+    artistIds: ["duke-ellington"],
+    place: "Freebody Park, Newport, Rhode Island",
+    date: "7 July 1956",
+    description:
+      "Paul Gonsalves’s 27-chorus tenor solo on “Diminuendo and Crescendo in Blue” set off a near-riot and revived Ellington’s career.",
+    model: 'festival-stage',
+    soundtrack: {
+      album: {"title": "Ellington at Newport", "year": 1956, "artistId": "duke-ellington"},
+      songs: [{"title": "Diminuendo and Crescendo in Blue", "artistId": "duke-ellington"}, {"title": "Jeep’s Blues", "artistId": "duke-ellington"}],
+      note: "The live album from that night.",
+    },
+  },
+  {
+    id: 'hitsville',
+    name: "Hitsville U.S.A.",
+    type: 'historical',
+    artistIds: ["the-supremes", "marvin-gaye", "stevie-wonder", "the-temptations"],
+    place: "2648 West Grand Boulevard, Detroit",
+    date: "From 1959",
+    description:
+      "Motown’s house-turned-headquarters, with the Studio A basement where its hits were recorded. It is now the Motown Museum.",
+    model: 'hall',
+    soundtrack: {
+      songs: [{"title": "Where Did Our Love Go", "artistId": "the-supremes"}, {"title": "I Heard It Through the Grapevine", "artistId": "marvin-gaye"}, {"title": "My Girl", "artistId": "the-temptations"}, {"title": "Uptight (Everything’s Alright)", "artistId": "stevie-wonder"}],
+      note: "Motown classics recorded at Hitsville.",
+    },
+  },
+  {
+    id: 'stax',
+    name: "Stax Records",
+    type: 'historical',
+    artistIds: ["otis-redding"],
+    place: "926 East McLemore Avenue, Memphis",
+    date: "1960–1975",
+    description:
+      "A converted cinema whose marquee read “Soulsville U.S.A.”, home of Otis Redding and the Stax house band.",
+    model: 'theater',
+    soundtrack: {
+      songs: [{"title": "(Sittin’ On) The Dock of the Bay", "artistId": "otis-redding"}, {"title": "Soul Man", "artistName": "Sam & Dave"}, {"title": "Green Onions", "artistName": "Booker T. & the M.G.’s"}],
+      note: "The Memphis sound of Stax.",
+    },
+  },
+  {
+    id: 'fame-studios',
+    name: "FAME Studios",
+    type: 'historical',
+    artistIds: ["aretha-franklin"],
+    place: "Muscle Shoals, Alabama",
+    date: "January 1967",
+    description:
+      "Aretha Franklin recorded “I Never Loved a Man (The Way I Love You)” here with the local session musicians.",
+    model: 'studio',
+    soundtrack: {
+      album: {"title": "I Never Loved a Man the Way I Love You", "year": 1967, "artistId": "aretha-franklin"},
+      songs: [{"title": "I Never Loved a Man (The Way I Love You)", "artistId": "aretha-franklin"}, {"title": "Do Right Woman, Do Right Man", "artistId": "aretha-franklin"}, {"title": "Respect", "artistId": "aretha-franklin"}],
+      note: "The album that began here.",
+    },
+  },
+  {
+    id: 'apollo',
+    name: "The Apollo Theater",
+    type: 'historical',
+    artistIds: ["james-brown", "ella-fitzgerald"],
+    place: "125th Street, Harlem",
+    date: "24 October 1962",
+    description:
+      "James Brown recorded Live at the Apollo here. Decades earlier, a teenage Ella Fitzgerald won the theatre’s Amateur Night.",
+    model: 'theater',
+    soundtrack: {
+      album: {"title": "Live at the Apollo", "year": 1963, "artistId": "james-brown"},
+      songs: [{"title": "I’ll Go Crazy", "artistId": "james-brown"}, {"title": "Think", "artistId": "james-brown"}, {"title": "Lost Someone", "artistId": "james-brown"}],
+      note: "From the live album recorded that night.",
+    },
+  },
+  {
+    id: 'monterey-pop',
+    name: "Monterey Pop Festival",
+    type: 'historical',
+    artistIds: ["otis-redding", "jimi-hendrix"],
+    place: "Monterey County Fairgrounds, California",
+    date: "16–18 June 1967",
+    description:
+      "Otis Redding won over the rock crowd, and Jimi Hendrix set his guitar on fire at the end of his set.",
+    model: 'festival-stage',
+    soundtrack: {
+      songs: [{"title": "Try a Little Tenderness", "artistId": "otis-redding"}, {"title": "Shake", "artistId": "otis-redding"}, {"title": "Wild Thing", "artistId": "jimi-hendrix"}],
+      note: "Songs from their Monterey sets.",
+    },
+  },
+  {
+    id: 'hope-road',
+    name: "56 Hope Road",
+    type: 'historical',
+    artistIds: ["bob-marley"],
+    place: "Kingston, Jamaica",
+    date: "1970s",
+    description:
+      "Bob Marley’s home and the base of his Tuff Gong label. After an assassination attempt there in December 1976 he moved to London for a time. It is now the Bob Marley Museum.",
+    model: 'hall',
+    soundtrack: {
+      album: {"title": "Exodus", "year": 1977, "artistId": "bob-marley"},
+      songs: [{"title": "Jamming", "artistId": "bob-marley"}, {"title": "Three Little Birds", "artistId": "bob-marley"}, {"title": "Natural Mystic", "artistId": "bob-marley"}],
+      note: "The album he made in London after leaving Hope Road.",
+    },
+  },
+  {
+    id: 'studio-one',
+    name: "Studio One",
+    type: 'historical',
+    artistIds: ["bob-marley", "burning-spear"],
+    place: "13 Brentford Road, Kingston",
+    date: "From 1963",
+    description:
+      "Clement “Coxsone” Dodd’s studio, where the Wailers and Burning Spear cut early records.",
+    model: 'studio',
+    soundtrack: {
+      songs: [{"title": "Simmer Down", "artistId": "bob-marley"}, {"title": "Door Peep", "artistId": "burning-spear"}, {"title": "Rude Boy", "artistId": "bob-marley"}],
+      note: "Records made at Studio One.",
+    },
+  },
+  {
+    id: 'one-love-peace',
+    name: "One Love Peace Concert",
+    type: 'historical',
+    artistIds: ["bob-marley", "peter-tosh"],
+    place: "National Stadium, Kingston",
+    date: "22 April 1978",
+    description:
+      "During “Jamming”, Bob Marley brought rival political leaders Michael Manley and Edward Seaga on stage to join hands. Peter Tosh played a defiant set earlier that night.",
+    model: 'stadium',
+    soundtrack: {
+      songs: [{"title": "Jamming", "artistId": "bob-marley"}, {"title": "Legalize It", "artistId": "peter-tosh"}, {"title": "Equal Rights", "artistId": "peter-tosh"}],
+      note: "Songs from that night.",
+    },
+  },
+  {
+    id: 'black-ark',
+    name: "The Black Ark",
+    type: 'historical',
+    artistIds: ["lee-scratch-perry", "bob-marley"],
+    place: "Washington Gardens, Kingston",
+    date: "1973–1979",
+    description:
+      "Lee “Scratch” Perry’s backyard studio, where he pushed reggae into dub. The Clash covered his production “Police and Thieves”.",
+    model: 'studio',
+    soundtrack: {
+      songs: [{"title": "Police and Thieves", "artistName": "Junior Murvin"}, {"title": "Punky Reggae Party", "artistId": "bob-marley"}, {"title": "Dread Lion", "artistId": "lee-scratch-perry"}],
+      note: "Black Ark productions.",
+    },
+  },
+  {
+    id: 'ruskin-arms',
+    name: "The Ruskin Arms",
+    type: 'historical',
+    artistIds: ["iron-maiden"],
+    place: "East Ham, London",
+    date: "Late 1970s",
+    description:
+      "The East London pub where the young Iron Maiden built their following before their debut.",
+    model: 'cellar-club',
+    soundtrack: {
+      album: {"title": "Iron Maiden", "year": 1980, "artistId": "iron-maiden"},
+      songs: [{"title": "Running Free", "artistId": "iron-maiden"}, {"title": "Iron Maiden", "artistId": "iron-maiden"}, {"title": "Prowler", "artistId": "iron-maiden"}],
+      note: "The debut album that came out of those pub years.",
+    },
+  },
+  {
+    id: 'monsters-of-rock',
+    name: "Monsters of Rock",
+    type: 'historical',
+    artistIds: ["judas-priest"],
+    place: "Donington Park, Leicestershire",
+    date: "16 August 1980",
+    description:
+      "The first Monsters of Rock festival, with Judas Priest on the bill, began Donington’s long run as a home of heavy metal.",
+    model: 'festival-stage',
+    soundtrack: {
+      album: {"title": "British Steel", "year": 1980, "artistId": "judas-priest"},
+      songs: [{"title": "Breaking the Law", "artistId": "judas-priest"}, {"title": "Living After Midnight", "artistId": "judas-priest"}, {"title": "Metal Gods", "artistId": "judas-priest"}],
+      note: "Priest’s album that year.",
+    },
+  },
 ];
 
 export function landmarksForArtist(artistId: string): HistoricalLandmark[] {
