@@ -81,7 +81,11 @@ export class InstanceBatch {
       if (this.hidden.has(i)) k = 0;
       let sy = 1;
       let sxz = 1;
-      if (mode === 0) sy = easeOutBack(k) * (k > 0 ? 1 : 0);
+      if (mode === 0) {
+        sy = k > 0 ? easeOutBack(k) : 0;
+        // Hide the footprint entirely until the part starts to rise.
+        if (k <= 0) sxz = 0;
+      }
       else if (mode === 1) sxz = sy = k > 0 ? easeOutBack(k) : 0;
       else sxz = sy = this.hidden.has(i) ? 0 : 1;
       const grow = mode === 0 ? easeOutCubic(k) : 1;
