@@ -9,7 +9,7 @@ import { discoverArtist } from './core/recommend.js';
 import { resolveTaste, soundtrackArtist, splitInput, type ResolvedTaste } from './core/resolve.js';
 import { store, type Tab } from './core/store.js';
 import { lookupMany } from './music/artistLookup.js';
-import { MusicService, PreviewPlayer } from './music/musicService.js';
+import { MusicService, PreviewPlayer, songKey } from './music/musicService.js';
 import { TIMELINE } from './scene/buildings.js';
 import { CityScene } from './scene/CityScene.js';
 import type { PickHit } from './scene/cityBuilder.js';
@@ -19,7 +19,8 @@ import { $, toast } from './ui/dom.js';
 import { Hud, type HudActions } from './ui/hud.js';
 import { DEMO_INPUT, Landing } from './ui/landing.js';
 import type { AppContext } from './app/context.js';
-import { createCompareController, createCrateController, createGigController, createMoodController, createPosterController, createWalkController, stampLandmark } from './app/features.js';
+import { createCompareController, createCrateController, createGigController, createMoodController, createPerformController, createPosterController, createTourController, createVisualiserController, createWalkController, stampLandmark } from './app/features.js';
+import { toursFor } from './core/tours.js';
 import type { MoodId } from './scene/mood.js';
 
 function webglAvailable(): boolean {
@@ -159,6 +160,36 @@ function boot() {
         if (opts.fly !== false) scene.focus(b.position, 22, 1.5);
         break;
       }
+      case 'home': {
+        const h = plan.homes.find((x) => x.id === sel.id);
+        if (!h) return;
+        city.select(h.position, '#8ff0c8', 5);
+        scene.highlightLabel('home', h.id);
+        if (opts.fly !== false) scene.focus(h.position, 34, 2);
+        const a = findArtist(h.artistId);
+        if (a && !a.custom && hud.albumsState(a.id) === undefined) {
+          hud.setAlbums(a.id, 'loading');
+          music.albumsFor(a).then((list) => hud.setAlbums(a.id, list), () => hud.setAlbums(a.id, 'error'));
+        }
+        break;
+      }
+      case 'billboard': {
+        const b = plan.billboards.find((x) => x.id === sel.id);
+        if (!b) return;
+        city.select(b.position, GENRES[b.genre].style.neon[0], 5);
+        if (opts.fly !== false) scene.focus(b.position, 34, b.baseHeight + 6, 1.2, 0.32);
+        break;
+      }
+      case 'street': {
+        const st = plan.streets.find((x) => x.id === sel.id);
+        if (!st) return;
+        city.select(null);
+        city.highlightStreet(st, GENRES[st.genre].style.neon[0]);
+        scene.highlightLabel('street', st.id);
+        const mid = (st.from + st.to) / 2;
+        if (opts.fly !== false) scene.focus(st.axis === 'x' ? { x: mid, z: st.c } : { x: st.c, z: mid }, Math.max(90, (st.to - st.from) * 0.9), 0);
+        break;
+      }
       case 'building': {
         const b = plan.buildings.find((x) => x.id === sel.id);
         if (!b) return;
@@ -282,6 +313,9 @@ function boot() {
     newCity() {
       walk.exit();
       gig.end();
+      tours.end();
+      perform.end();
+      if (viz.on) viz.toggle();
       player.stop();
       select(null);
       actions.toggleList(false);
@@ -320,6 +354,8 @@ function boot() {
     endGig: () => gig.end(),
     walk: (kind, id) => {
       gig.end();
+      tours.end();
+      perform.end();
       walk.enter(kind, id);
     },
     exitWalk: () => walk.exit(),
@@ -345,6 +381,80 @@ function boot() {
       history.replaceState(null, '', shareUrl());
     },
     playMood: () => void mood.play(),
+    async listenStreet(id) {
+      const st = store.get().plan?.streets.find((x) => x.id === id);
+      const artist = st && findArtist(st.artistId);
+      if (!st || !artist) return;
+      const key = `street:${id}`;
+      hud.setTracks(key, 'loading');
+      const res = await music.tracksForSongs(key, [{ artist, title: st.song }]);
+      hud.setTracks(key, res);
+      const t = res.tracks.find((x) => x.previewUrl);
+      if (t) player.play(t);
+      else if (res.degraded) toast('Music data unavailable. Showing curated city data.', 'warn');
+    },
+    async listenBillboard(id) {
+      const b = store.get().plan?.billboards.find((x) => x.id === id);
+      const artist = b && findArtist(b.artistId);
+      if (!b || !artist) return;
+      const key = `bb:${id}`;
+      hud.setTracks(key, 'loading');
+      let res = null;
+      try {
+        const albums = await music.albumsFor(artist);
+        const want = songKey(b.title);
+        const album = albums.find((a) => songKey(a.title).startsWith(want) || want.startsWith(songKey(a.title)));
+        if (album) res = await music.albumTracks(album, artist);
+      } catch {
+        /* fall back below */
+      }
+      if (!res || !res.tracks.some((t) => t.previewUrl)) res = await music.tracksFor(artist);
+      hud.setTracks(key, res);
+      if (res.tracks.some((t) => t.previewUrl)) player.playQueue(res.tracks);
+    },
+    crateForBillboard(id) {
+      const plan = store.get().plan;
+      const b = plan?.billboards.find((x) => x.id === id);
+      if (!plan || !b) return;
+      const artist = findArtist(b.artistId);
+      const stores = plan.venues
+        .filter((v) => v.type === 'record-store')
+        .map((v) => ({ v, s: Math.hypot(v.position.x - b.position.x, v.position.z - b.position.z) - (artist?.genres.some((g) => v.genres.includes(g)) ? 400 : 0) }))
+        .sort((x, y) => x.s - y.s);
+      const shop = stores[0]?.v;
+      if (!shop) return;
+      toast(`${shop.name} has ${b.title} in stock.`);
+      crate.open(shop.id, b.artistId);
+    },
+    async playAlbum(artistId, albumId) {
+      const artist = findArtist(artistId);
+      const list = hud.albumsState(artistId);
+      const album = Array.isArray(list) ? list.find((a) => a.id === albumId) : undefined;
+      if (!artist || !album) return;
+      const key = `home:${artistId}`;
+      hud.markAlbum(artistId, albumId);
+      hud.setTracks(key, 'loading');
+      const res = await music.albumTracks(album, artist);
+      hud.setTracks(key, res);
+      if (res.tracks.some((t) => t.previewUrl)) player.playQueue(res.tracks);
+      else toast('No previews for that album right now.', 'warn');
+    },
+    startTour(id) {
+      gig.end();
+      perform.end();
+      tours.start(id);
+    },
+    tourStep: (d) => tours.step(d),
+    endTour: () => tours.end(),
+    openPerform() {
+      gig.end();
+      tours.end();
+      perform.open();
+    },
+    startPerform: () => void perform.start(),
+    performNext: () => perform.next(),
+    endPerform: () => perform.end(),
+    toggleVisualiser: () => viz.toggle(),
   };
 
   const hud = new Hud($('#hud'), actions);
@@ -397,8 +507,11 @@ function boot() {
         compare = compareTastes(yours, theirs, name, withFriend.name);
       }
       const plan = generateCity(taste);
+      tours.end();
+      perform.end();
       store.set({ plan, compare });
       hud.compare = compare;
+      hud.tours = toursFor(plan);
       hud.mount(plan);
       hud.setTab(store.get().tab, false);
       scene.setAmbient(false);
@@ -416,12 +529,31 @@ function boot() {
 
   const crate = createCrateController(ctx, (id) => actions.addArtist(id));
   const mood = createMoodController(ctx);
+  const tours = createTourController(ctx);
+  const perform = createPerformController(ctx);
+  const viz = createVisualiserController(ctx, () => void mood.play());
+
+  /** Swaps billboard sleeves for real covers, one request at a time to stay polite to the API. */
+  const loadBillboardArt = async (plan: NonNullable<ReturnType<typeof store.get>['plan']>) => {
+    for (const b of plan.billboards) {
+      if (store.get().plan !== plan) return;
+      const artist = findArtist(b.artistId);
+      if (!artist || artist.custom) continue;
+      const url = await music.albumArt(artist, b.title);
+      if (url && store.get().plan === plan) {
+        hud.billboardArt.set(b.id, url);
+        scene.setBillboardArt(b.id, url);
+      }
+      await new Promise((r) => setTimeout(r, 450));
+    }
+  };
   const compareUi = createCompareController((yours, f, you) => void build(yours, f, you));
 
   const buildComplete = () => {
     hud.showBuild(false);
     setPhase('city');
     const plan = store.get().plan;
+    if (plan) void loadBillboardArt(plan);
     const compare = store.get().compare;
     const messages = [...notices];
     if (plan?.unknownInputs.length) messages.push(`We couldn’t find ${plan.unknownInputs.join(', ')}, so they appear as musical interpretations.`);

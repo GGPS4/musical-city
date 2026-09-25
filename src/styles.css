@@ -565,6 +565,36 @@ svg {
   border-color: rgba(201, 182, 255, 0.45);
 }
 
+.map-label--home {
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(8, 18, 14, 0.72);
+  border: 1px solid rgba(143, 240, 200, 0.35);
+  text-shadow: none;
+}
+
+.map-label--home .map-label__title {
+  font-size: 10.5px;
+  color: #bff7df;
+}
+
+.map-label--street {
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: #1f5c3a;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  text-shadow: none;
+  transform-origin: center;
+}
+
+.map-label--street .map-label__title {
+  font-family: var(--body);
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+
 .map-label--busker {
   padding: 2px 7px;
   border-radius: 999px;
@@ -2859,5 +2889,324 @@ button.stamp {
 @media (prefers-reduced-motion: reduce) {
   .sleeve {
     transition: none;
+  }
+}
+
+/* ---------------- streets, plaques ---------------- */
+
+.walk-street {
+  position: absolute;
+  top: 78px;
+  left: 16px;
+  pointer-events: auto;
+}
+
+.walk-street button {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.walk-street__sign {
+  display: inline-block;
+  padding: 6px 14px;
+  border: 2px solid #fff;
+  border-radius: 5px;
+  background: #1f5c3a;
+  box-shadow: 0 0 0 2px #1f5c3a, 0 10px 24px rgba(0, 0, 0, 0.45);
+  font-weight: 700;
+  font-size: 14px;
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+
+.walk-now__plaque {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #c9a24a, #8a6a26);
+  color: #1d1406;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  max-width: 420px;
+  box-shadow: inset 0 1px 0 rgba(255, 240, 200, 0.6);
+}
+
+.plaques {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plaques li {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(201, 162, 74, 0.2), rgba(138, 106, 38, 0.12));
+  border: 1px solid rgba(201, 162, 74, 0.45);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #f3e6c4;
+}
+
+.street-sign {
+  display: inline-block;
+  margin: 4px 0 10px;
+  padding: 7px 16px;
+  border: 2px solid #fff;
+  border-radius: 5px;
+  background: #1f5c3a;
+  box-shadow: 0 0 0 2px #1f5c3a;
+  font-weight: 700;
+  font-size: 18px;
+  color: #fff;
+}
+
+.cover {
+  display: block;
+  width: 100%;
+  max-width: 260px;
+  aspect-ratio: 1;
+  margin: 10px 0;
+  border-radius: 4px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+}
+
+.discography {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.album-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.album-tile img,
+.album-tile .album-tile__blank {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 3px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+  transition: transform 0.15s;
+}
+
+.album-tile:hover img {
+  transform: translateY(-2px);
+}
+
+.album-tile.is-on img {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.album-tile strong {
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.album-tile small {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ---------------- tours, busking, visualiser ---------------- */
+
+.tour,
+.perform {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(360px, calc(100% - 32px));
+  padding: 14px 16px;
+  background: var(--panel-solid);
+}
+
+.hud.is-touring .dna,
+.hud.is-performing .dna {
+  opacity: 0.35;
+}
+
+.tour__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tour__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.tour__count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.tour__title {
+  font-family: var(--display);
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.tour__sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.tour__caption {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #d9d6ea;
+  max-height: 7.5em;
+  overflow-y: auto;
+}
+
+.tour__progress {
+  display: block;
+  height: 3px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.tour__progress i {
+  display: block;
+  height: 100%;
+  background: var(--gold);
+  transition: width 0.4s var(--ease);
+}
+
+.tour__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.gig-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff3b52;
+  box-shadow: 0 0 10px #ff3b52;
+  animation: pulse 1s infinite;
+}
+
+.perform__lede {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.perform__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 4px 0;
+}
+
+.chip-btn {
+  padding: 5px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chip-btn[aria-pressed='true'] {
+  border-color: var(--gold);
+  background: rgba(255, 210, 122, 0.12);
+  color: #ffe6b3;
+}
+
+.perform__field {
+  margin: 4px 0 0;
+}
+
+.perform__field select {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: #14152a;
+  color: var(--text);
+  font: inherit;
+}
+
+.perform__stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 6px 0 2px;
+}
+
+.perform__stats div {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.perform__stats strong {
+  display: block;
+  font-family: var(--display);
+  font-size: 22px;
+}
+
+.perform__stats small {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.dock__btn[aria-pressed='true'] {
+  background: rgba(255, 210, 122, 0.15);
+  color: var(--gold);
+}
+
+@media (max-width: 760px) {
+  .tour,
+  .perform {
+    top: auto;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    bottom: calc(118px + var(--safe-b));
+  }
+  .tour__caption {
+    max-height: 4.5em;
   }
 }

@@ -327,6 +327,43 @@ export interface BuskerPlan {
   instrument: Instrument;
 }
 
+/** A street named after a song by an artist in the city. `axis` is the direction it runs. */
+export interface StreetPlan {
+  id: string;
+  name: string;
+  song: string;
+  artistId: string;
+  genre: GenreId;
+  /** 'x': runs along x at z = c. 'z': runs along z at x = c. */
+  axis: 'x' | 'z';
+  c: number;
+  from: number;
+  to: number;
+}
+
+export interface HomePlan {
+  id: string;
+  artistId: string;
+  position: Vec2;
+  rotation: number;
+  width: number;
+  depth: number;
+  style: 'house' | 'studio' | 'loft';
+  genre: GenreId;
+}
+
+export interface BillboardPlan {
+  id: string;
+  artistId: string;
+  title: string;
+  year: number;
+  position: Vec2;
+  /** Roof height of the building it stands on. */
+  baseHeight: number;
+  rotation: number;
+  genre: GenreId;
+}
+
 export interface CityPlan {
   seed: number;
   size: number;
@@ -347,6 +384,9 @@ export interface CityPlan {
   connections: Connection[];
   labels: LabelTowerPlan[];
   buskers: BuskerPlan[];
+  streets: StreetPlan[];
+  homes: HomePlan[];
+  billboards: BillboardPlan[];
   dna: GenreWeight[];
   artists: Artist[];
   /** Artists the user entered (ids). */
@@ -363,4 +403,7 @@ export type Selection =
   | { kind: 'district'; genre: GenreId }
   | { kind: 'label'; id: string }
   | { kind: 'busker'; id: string }
+  | { kind: 'home'; id: string }
+  | { kind: 'billboard'; id: string }
+  | { kind: 'street'; id: string }
   | null;
