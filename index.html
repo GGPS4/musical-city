@@ -51,6 +51,14 @@
             </div>
           </div>
           <div class="topbar__actions">
+            <div class="mood">
+              <button type="button" id="mood-btn" class="btn btn--ghost btn--sm mood__btn" aria-haspopup="true" aria-expanded="false"><span id="mood-swatch" class="mood__swatch" aria-hidden="true"></span><span id="mood-name">Mood</span></button>
+              <div id="mood-menu" class="mood__menu panel" hidden>
+                <p class="mood__title">Set the mood</p>
+                <p class="mood__lede">Changes the light, and plays music from your city that fits.</p>
+                <div id="mood-options" class="mood__options"></div>
+              </div>
+            </div>
             <button type="button" class="btn btn--ghost btn--sm" data-action="open-compare">Compare</button>
             <button type="button" class="btn btn--ghost btn--sm" data-action="open-poster">Poster</button>
             <button type="button" class="btn btn--ghost btn--sm" data-action="share">Share</button>
@@ -140,6 +148,27 @@
             <button type="button" class="btn btn--ghost btn--sm" data-close>Close</button>
             <a id="poster-download" class="btn btn--primary btn--sm" download="musical-city-poster.png" href="#" aria-disabled="true">Download PNG</a>
           </div>
+        </div>
+      </div>
+
+      <div id="crate-modal" class="modal crate" hidden role="dialog" aria-modal="true" aria-labelledby="crate-title">
+        <div class="crate__panel panel">
+          <header class="crate__head">
+            <div>
+              <p id="crate-store" class="eyebrow">Record store</p>
+              <h2 id="crate-title">Dig the crates</h2>
+            </div>
+            <button type="button" class="icon-btn" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg></button>
+          </header>
+          <div id="crate-tabs" class="crate__tabs" role="tablist"></div>
+          <div id="crate-stage" class="crate__stage" tabindex="0" aria-label="Records in the crate. Use the arrow keys to flip."></div>
+          <div id="crate-now" class="crate__now" aria-live="polite"></div>
+          <div class="crate__controls">
+            <button type="button" id="crate-prev" class="btn btn--ghost btn--sm" aria-label="Previous record">← Prev</button>
+            <span id="crate-count" class="crate__count"></span>
+            <button type="button" id="crate-next" class="btn btn--ghost btn--sm" aria-label="Next record">Next →</button>
+          </div>
+          <p class="crate__hint">Scroll, swipe or use ← → to flip · Space to pause · Previews via Apple Music</p>
         </div>
       </div>
 

@@ -11,6 +11,10 @@ Type in a few artists or genres (try *The Beatles, David Bowie, The Clash, The S
 - **Genre districts.** Eighteen genres (rock, punk, indie, metal, hip hop, jazz, soul, reggae, pop, electronic and more), each with its own architecture: brick warehouses and dive bars for punk, terraced streets and small venues for indie, chrome towers and arena marquees for hard rock, domes and curved towers for psychedelic, theatres and ornate blocks for classic rock, brutalist concrete for post-punk, neon towers for electronic, and more. Districts blend into each other, so a street halfway between Punk and Psychedelic mixes both styles. Strong overlaps are labelled as their own quarter (e.g. *Psychedelic × Punk Quarter*).
 - **Venues.** Bars, clubs, theatres, concert halls, warehouses, rooftop stages and record stores. They're all **fictional** and labelled *Musical interpretation*. Click one to see its genres, its artists, a description, and **Listen**.
 - **Record stores.** These show a *You might also like* trail (for example The Clash → Gang of Four → Wire → Television). **Add to city** opens a new venue for that artist in the right district.
+- **Crate digging.** In any record store, **Dig the crates** opens a crate of records filed by genre, then A–Z. Flip through them with scroll, swipe or the arrow keys, and each record plays a preview from that album. The real cover appears once Apple's API returns it.
+- **Record label towers.** Real labels (Motown, Blue Note, Factory, Sub Pop, Def Jam, Island and about 50 more) get a tower if their artists are in your city. Click a tower for its founding year, city and founders, and glowing lines to wherever its artists play. You can also play the roster.
+- **Street buskers.** Fictional buskers stand on street corners, each working through one artist's songs. Click one to listen or toss a coin for another song. When you walk past, you hear them.
+- **Mood.** Six moods (City night, After hours, Golden hour, Riot, Rainy day, Daydream) change the sky, fog, window light, bloom and weather (rain, lightning, floating sparkles), then play artists from your city that fit. The mood is saved in the share link.
 - **Historical landmarks.** Thirty landmarks based on documented events: the Beatles' rooftop concert (30 Jan 1969), the Abbey Road crossing, the Cavern Club, the Sex Pistols' Jubilee boat trip, Hansa Studios, CBGB, the Troubadour, Knebworth and more. They carry a gold *Historical landmark* badge, with the place and date. Each model is a miniature *inspired by* the place, not a replica. Every genre also gets a fictional monument, labelled *Musical interpretation*.
 - **Landmark soundtracks.** Each landmark has the music tied to it: Abbey Road plays *Abbey Road*, the rooftop concert plays *Let It Be* (“Get Back”, “Don't Let Me Down”…), Battersea plays *Animals*. **Play the soundtrack** finds official previews of those exact songs.
 - **Musical DNA.** A rough genre breakdown, labelled *Estimated from your selections*. The bigger a genre's share, the larger and more central its district.
@@ -66,6 +70,7 @@ src/
     artists.ts             Curated catalogue (~170 artists, relationships, albums, songs)
     genres.ts              Genres + architectural style per genre
     landmarks.ts           Historical landmarks (real places/events only) and their soundtracks
+    labels.ts              Real record labels: founding facts and catalogue artists
   core/                    Pure logic, no Three.js; unit-tested
     resolve.ts             Free text → artists/genres (aliases, fuzzy match, autocomplete)
     dna.ts                 Musical DNA estimate
@@ -74,16 +79,18 @@ src/
     recommend.ts           Connections, "you might also like" trails, Discover
     compare.ts             Taste overlap, shared genres, district ownership
     passport.ts            Landmark stamps and scenes (localStorage)
+    crate.ts               Which records a record store's crate holds
     random.ts, store.ts    Seeded PRNG, tiny observable store
   music/musicService.ts    Provider abstraction, preview player
   music/artistLookup.ts    MusicBrainz + iTunes lookups for artists outside the catalogue
-  app/                     Feature controllers: walking, gig night, compare, poster
+  app/                     Feature controllers: walking, gig night, compare, poster, crates, mood
   scene/                   Rendering
     CityScene.ts           Renderer, camera, controls, bloom, picking, camera moves, build intro, poster capture
     walk.ts                First-person walking with collisions
+    mood.ts                Mood looks, blending, rain and sparkles
     cityBuilder.ts         CityPlan → meshes; build animation; selection/beam/arc helpers
     buildings.ts           Building archetypes composed from instanced parts
-    models.ts              Venue, landmark and monument models
+    models.ts              Venue, landmark, monument, label tower and busker models
     materials.ts           Shared materials, including the procedural window shader
     instancer.ts           Instanced batches with per-instance grow/pop animation
     geometries.ts, textures.ts, labels.ts
@@ -94,7 +101,7 @@ tests/city.test.ts
 
 ### Performance notes
 
-- About 700 buildings are drawn as a few dozen `InstancedMesh` draw calls. Windows come from a shader (world-space, lit per instance with a hash), so there are no window textures or extra geometry.
+- Cities are 19–27 blocks across and hold up to about 2,500 buildings, drawn as a few dozen `InstancedMesh` draw calls. Windows come from a shader (world-space, lit per instance with a hash), so there are no window textures or extra geometry.
 - Materials and geometries are shared. Only venues and landmarks (a few dozen) are individual meshes.
 - There is one shadow-casting light. Bloom and shadows are turned off on phones, and on any device that renders under about 30 fps.
 - Instanced meshes switch frustum culling back on once the build animation finishes.
