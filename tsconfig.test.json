@@ -4,5 +4,5 @@
     "types": ["node"],
     "lib": ["ES2022", "DOM"]
   },
-  "include": ["tests", "src/core", "src/data", "src/types.ts"]
+  "include": ["tests", "src/core", "src/data", "src/music", "src/types.ts"]
 }

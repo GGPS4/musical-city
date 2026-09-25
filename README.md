@@ -8,7 +8,7 @@ Type in a few artists or genres (try *The Beatles, David Bowie, The Clash, The S
 
 ## What's in the city
 
-- **Genre districts.** Twelve genres, each with its own architecture: brick warehouses and dive bars for punk, terraced streets and small venues for indie, chrome towers and arena marquees for hard rock, domes and curved towers for psychedelic, theatres and ornate blocks for classic rock, brutalist concrete for post-punk, neon towers for electronic, and more. Districts blend into each other, so a street halfway between Punk and Psychedelic mixes both styles. Strong overlaps are labelled as their own quarter (e.g. *Psychedelic × Punk Quarter*).
+- **Genre districts.** Eighteen genres (rock, punk, indie, metal, hip hop, jazz, soul, reggae, pop, electronic and more), each with its own architecture: brick warehouses and dive bars for punk, terraced streets and small venues for indie, chrome towers and arena marquees for hard rock, domes and curved towers for psychedelic, theatres and ornate blocks for classic rock, brutalist concrete for post-punk, neon towers for electronic, and more. Districts blend into each other, so a street halfway between Punk and Psychedelic mixes both styles. Strong overlaps are labelled as their own quarter (e.g. *Psychedelic × Punk Quarter*).
 - **Venues.** Bars, clubs, theatres, concert halls, warehouses, rooftop stages and record stores. They're all **fictional** and labelled *Musical interpretation*. Click one to see its genres, its artists, a description, and **Listen**.
 - **Record stores.** These show a *You might also like* trail (for example The Clash → Gang of Four → Wire → Television). **Add to city** opens a new venue for that artist in the right district.
 - **Historical landmarks.** Thirty landmarks based on documented events: the Beatles' rooftop concert (30 Jan 1969), the Abbey Road crossing, the Cavern Club, the Sex Pistols' Jubilee boat trip, Hansa Studios, CBGB, the Troubadour, Knebworth and more. They carry a gold *Historical landmark* badge, with the place and date. Each model is a miniature *inspired by* the place, not a replica. Every genre also gets a fictional monument, labelled *Musical interpretation*.
@@ -16,6 +16,12 @@ Type in a few artists or genres (try *The Beatles, David Bowie, The Clash, The S
 - **Musical DNA.** A rough genre breakdown, labelled *Estimated from your selections*. The bigger a genre's share, the larger and more central its district.
 - **Connections.** Arcs link related artists across the city. Clicking an artist lights up everywhere they appear, highlights their connections, and lets you follow a connection to the next artist.
 - **Discover.** Suggests an artist you didn't enter, based on your taste.
+- **Walk the streets.** Drop to street level and walk around (WASD/arrow keys and drag to look, or the on-screen stick on phones). As you pass a venue, its artists' previews fade in and out with distance.
+- **Gig night.** Any venue or landmark can host a show: crowds fill the streets, searchlights sweep, lights pulse to the beat and landmarks get fireworks, with a lineup you can step through.
+- **Landmark passport.** Play a historical landmark's soundtrack to stamp your passport. Stamps are grouped into scenes (Beatlemania, Punk Year Zero, Kingston Sound…) and saved in your browser.
+- **Compare cities.** Add a friend's artists (or paste their city link) to build one shared city: your side, their side and the shared ground, with a taste-overlap score and "bridge" artists that connect you.
+- **Any artist.** Names outside the catalogue are looked up on MusicBrainz (genres, origin, start year, relationships) and the iTunes Search API (album and songs), then placed in the right district. Results are cached in your browser.
+- **Poster.** Export a print-style PNG of your city with district names, numbered landmarks and your Musical DNA.
 - **Share.** Copies a link that rebuilds the same city (`?city=...`). Generation is deterministic.
 
 ## Music playback
@@ -57,7 +63,7 @@ Vite + TypeScript + Three.js. The UI is plain DOM, because it's small and the 3D
 src/
   types.ts                 Domain types: Artist, Genre, VenuePlan, LandmarkPlan, CityPlan…
   data/
-    artists.ts             Curated catalogue (~100 artists, relationships, albums, songs)
+    artists.ts             Curated catalogue (~170 artists, relationships, albums, songs)
     genres.ts              Genres + architectural style per genre
     landmarks.ts           Historical landmarks (real places/events only) and their soundtracks
   core/                    Pure logic, no Three.js; unit-tested
@@ -66,17 +72,22 @@ src/
     cityGenerator.ts       Seeded city plan: districts, blocks, river, bridges, buildings,
                            venues, landmarks, connections; plus introduceArtist()
     recommend.ts           Connections, "you might also like" trails, Discover
+    compare.ts             Taste overlap, shared genres, district ownership
+    passport.ts            Landmark stamps and scenes (localStorage)
     random.ts, store.ts    Seeded PRNG, tiny observable store
   music/musicService.ts    Provider abstraction, preview player
+  music/artistLookup.ts    MusicBrainz + iTunes lookups for artists outside the catalogue
+  app/                     Feature controllers: walking, gig night, compare, poster
   scene/                   Rendering
-    CityScene.ts           Renderer, camera, controls, bloom, picking, camera moves, build intro
+    CityScene.ts           Renderer, camera, controls, bloom, picking, camera moves, build intro, poster capture
+    walk.ts                First-person walking with collisions
     cityBuilder.ts         CityPlan → meshes; build animation; selection/beam/arc helpers
     buildings.ts           Building archetypes composed from instanced parts
     models.ts              Venue, landmark and monument models
     materials.ts           Shared materials, including the procedural window shader
     instancer.ts           Instanced batches with per-instance grow/pop animation
     geometries.ts, textures.ts, labels.ts
-  ui/                      Landing, HUD (DNA, explorer lists, info panel, player), helpers
+  ui/                      Landing, HUD (DNA, explorer lists, info panel, player, passport), poster layout
   main.ts                  Wires scene, UI, music and state together
 tests/city.test.ts
 ```
@@ -97,8 +108,6 @@ tests/city.test.ts
 
 ## Ideas for later
 
-- A remote artist metadata provider for names outside the catalogue
 - Spotify / Apple Music SDK playback (full tracks for signed-in users)
-- Walking or driving mode through the streets
-- Saving cities to an account and comparing two people's cities
-- More landmark models and more genres (hip hop, jazz, soul…)
+- Saving cities to an account
+- More landmark models and genres (country, blues, K-pop, Latin…)

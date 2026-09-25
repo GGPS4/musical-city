@@ -51,6 +51,8 @@
             </div>
           </div>
           <div class="topbar__actions">
+            <button type="button" class="btn btn--ghost btn--sm" data-action="open-compare">Compare</button>
+            <button type="button" class="btn btn--ghost btn--sm" data-action="open-poster">Poster</button>
             <button type="button" class="btn btn--ghost btn--sm" data-action="share">Share</button>
             <button type="button" class="btn btn--ghost btn--sm" data-action="new-city">New city</button>
           </div>
@@ -80,9 +82,12 @@
           <button type="button" class="dock__btn" data-action="tab" data-tab="venues" aria-pressed="false">Venues</button>
           <button type="button" class="dock__btn" data-action="tab" data-tab="landmarks" aria-pressed="false">Landmarks</button>
           <button type="button" class="dock__btn" data-action="tab" data-tab="artists" aria-pressed="false">Artists</button>
+          <button type="button" class="dock__btn" data-action="tab" data-tab="passport" aria-pressed="false">Passport</button>
           <span class="dock__sep" aria-hidden="true"></span>
           <button type="button" class="dock__btn dock__btn--discover" data-action="discover">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z" fill="currentColor"/></svg>Discover</button>
+          <button type="button" class="dock__btn" data-action="walk" title="Walk the streets">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="13" cy="4" r="2" fill="currentColor"/><path d="M11 21l1.5-6-2.5-2 1-5 3 3h3M10 8l-3 2-1 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Walk</button>
           <button type="button" class="dock__btn dock__btn--icon" data-action="overview" aria-label="Back to overview" title="Overview">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>
         </nav>
@@ -96,7 +101,46 @@
           <button type="button" class="btn btn--ghost btn--sm" data-action="skip">Skip</button>
         </div>
 
+        <div id="gig" class="panel gig" hidden></div>
+
+        <div id="walk-hud" class="walk-hud" hidden>
+          <div class="walk-hud__top">
+            <span class="walk-hud__title">Walking</span>
+            <span class="walk-hud__keys">WASD / arrows to move · drag to look · Shift to run</span>
+            <button type="button" class="btn btn--ghost btn--sm" data-action="exit-walk">Exit (Esc)</button>
+          </div>
+          <div id="walk-now" class="panel walk-now" hidden></div>
+          <div id="walk-stick" class="walk-stick" aria-hidden="true"><i></i></div>
+        </div>
+
         <p id="hint" class="hint">Drag to orbit · Scroll or pinch to zoom · Right-drag or two fingers to pan · Click the glowing markers</p>
+      </div>
+
+      <div id="compare-modal" class="modal" hidden>
+        <form id="compare-form" class="modal__card panel" autocomplete="off">
+          <p class="eyebrow">Compare cities</p>
+          <h2>Build a city from two tastes</h2>
+          <p class="modal__lede">Add a friend’s artists or paste the link to their Musical City. You’ll get one shared city with your sides, their sides and the ground you share, plus a taste-overlap score.</p>
+          <label class="field"><span>Your name</span><input id="cmp-you" maxlength="24" placeholder="You" /></label>
+          <label class="field"><span>Their name</span><input id="cmp-them" maxlength="24" placeholder="Alex" /></label>
+          <label class="field"><span>Their artists or genres, or their city link</span><textarea id="cmp-taste" rows="3" placeholder="Arctic Monkeys, The Strokes, Indie   —   or   https://…?city=…"></textarea></label>
+          <p id="cmp-error" class="form-error" role="alert"></p>
+          <div class="modal__actions">
+            <button type="button" class="btn btn--ghost btn--sm" data-close>Cancel</button>
+            <button type="submit" class="btn btn--primary btn--sm">Build our city</button>
+          </div>
+        </form>
+      </div>
+
+      <div id="poster-modal" class="modal" hidden>
+        <div class="modal__card modal__card--poster panel">
+          <p class="eyebrow">Poster</p>
+          <div id="poster-preview" class="poster-preview"><p class="tracks__loading">Rendering your poster…</p></div>
+          <div class="modal__actions">
+            <button type="button" class="btn btn--ghost btn--sm" data-close>Close</button>
+            <a id="poster-download" class="btn btn--primary btn--sm" download="musical-city-poster.png" href="#" aria-disabled="true">Download PNG</a>
+          </div>
+        </div>
       </div>
 
       <div id="toast" class="toast" role="status" aria-live="polite"></div>
