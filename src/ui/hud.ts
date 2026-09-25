@@ -7,10 +7,13 @@ import type { Tab } from '../core/store.js';
 import { SCENES, type Passport } from '../core/passport.js';
 import { ownerLabel, type Comparison } from '../core/compare.js';
 import { HISTORICAL_LANDMARKS } from '../data/landmarks.js';
+import { LABEL_BY_ID, labelsFor } from '../data/labels.js';
 import type { Track, PlayerState } from '../music/musicService.js';
 import { streamingLinks } from '../music/musicService.js';
-import type { Archetype, Artist, CityPlan, GenreId, Selection } from '../types.js';
+import type { Archetype, Artist, CityPlan, GenreId, Instrument, Selection } from '../types.js';
 import { $, ICONS, esc, onAction } from './dom.js';
+
+export type WalkKind = 'venue' | 'landmark' | 'label' | 'busker';
 
 export interface HudActions {
   select(sel: Selection, opts?: { fly?: boolean }): void;
@@ -32,10 +35,14 @@ export interface HudActions {
   startGig(kind: 'venue' | 'landmark', id: string): void;
   nextAct(): void;
   endGig(): void;
-  walk(kind?: 'venue' | 'landmark', id?: string): void;
+  walk(kind?: WalkKind, id?: string): void;
   exitWalk(): void;
   openCompare(): void;
   openPoster(): void;
+  tip(buskerId: string): void;
+  openCrate(venueId: string): void;
+  setMood(mood: string): void;
+  playMood(): void;
 }
 
 const ARCHETYPE_LABEL: Record<Archetype, string> = {
@@ -49,6 +56,18 @@ const ARCHETYPE_LABEL: Record<Archetype, string> = {
   classic: 'Old theatre-district building',
   'neon-tower': 'Neon tower',
   townhouse: 'Terraced house',
+};
+
+const INSTRUMENT_LABEL: Record<Instrument, string> = {
+  guitar: 'Acoustic guitar',
+  bass: 'Bass guitar',
+  sax: 'Saxophone',
+  trumpet: 'Trumpet',
+  keys: 'Keyboard',
+  drums: 'Street drums',
+  turntables: 'Portable decks',
+  mic: 'Vocals',
+  violin: 'Violin',
 };
 
 const genreChip = (g: GenreId) =>
@@ -97,6 +116,18 @@ export class Hud {
         return this.actions.select({ kind: 'venue', id: d.id ?? '' }, { fly: true });
       case 'landmark':
         return this.actions.select({ kind: 'landmark', id: d.id ?? '' }, { fly: true });
+      case 'label':
+        return this.actions.select({ kind: 'label', id: d.id ?? '' }, { fly: true });
+      case 'busker':
+        return this.actions.select({ kind: 'busker', id: d.id ?? '' }, { fly: true });
+      case 'tip':
+        return this.actions.tip(d.id ?? '');
+      case 'open-crate':
+        return this.actions.openCrate(d.id ?? '');
+      case 'mood':
+        return this.actions.setMood(d.mood ?? 'night');
+      case 'play-mood':
+        return this.actions.playMood();
       case 'artist':
         return this.actions.select({ kind: 'artist', id: d.id ?? '' }, { fly: true });
       case 'district':
@@ -143,7 +174,7 @@ export class Hud {
       case 'gig-end':
         return this.actions.endGig();
       case 'walk':
-        return this.actions.walk(d.kind as 'venue' | 'landmark' | undefined, d.id);
+        return this.actions.walk(d.kind as WalkKind | undefined, d.id);
       case 'exit-walk':
         return this.actions.exitWalk();
       case 'open-compare':
@@ -251,12 +282,23 @@ export class Hud {
           <span class="row__main"><strong>${esc(v.name)}</strong><small>${esc(cap(venueTypeLabel(v.type)))} · ${v.genres.map((g) => esc(GENRES[g].name)).join(' / ')}</small></span>
           ${v.addedBy ? '<span class="badge badge--new">New</span>' : ''}</button></li>`)
         .join('');
+      if (plan.buskers.length) {
+        body += `<li class="row-head">Street buskers</li>` + plan.buskers
+          .map((b) => `<li><button type="button" class="row" data-action="busker" data-id="${b.id}">
+            <span class="dot dot--note" style="color:${GENRES[b.genre].style.neon[0]}">♪</span>
+            <span class="row__main"><strong>${esc(b.name)}</strong><small>Playing ${esc(this.artistName(b.artistId))} · ${esc(GENRES[b.genre].name)}</small></span></button></li>`)
+          .join('');
+      }
     } else if (tab === 'landmarks') {
       const hist = plan.landmarks.filter((l) => l.type === 'historical');
       const insp = plan.landmarks.filter((l) => l.type === 'inspired');
       body =
         (hist.length ? `<li class="row-head">Historical landmarks</li>` : '') +
         hist.map((l) => `<li><button type="button" class="row" data-action="landmark" data-id="${l.id}"><span class="badge badge--hist">Hist</span><span class="row__main"><strong>${esc(l.name)}</strong><small>${esc(l.place ?? '')} · ${esc(l.date ?? '')}</small></span></button></li>`).join('') +
+        (plan.labels.length ? `<li class="row-head">Record labels</li>` + plan.labels.map((t) => {
+          const l = LABEL_BY_ID[t.labelId];
+          return `<li><button type="button" class="row" data-action="label" data-id="${t.id}"><span class="dot" style="background:${t.color}"></span><span class="row__main"><strong>${esc(t.name)}</strong><small>Est. ${l?.founded ?? ''} · ${esc(l?.city ?? '')} · ${t.artistIds.length} in town</small></span></button></li>`;
+        }).join('') : '') +
         `<li class="row-head">Musical interpretations</li>` +
         insp.map((l) => `<li><button type="button" class="row" data-action="landmark" data-id="${l.id}"><span class="badge badge--insp">Interp</span><span class="row__main"><strong>${esc(l.name)}</strong><small>${esc(GENRES[l.genres[0]].name)} District monument</small></span></button></li>`).join('');
     } else if (tab === 'passport') {
@@ -325,6 +367,8 @@ export class Hud {
     else if (sel.kind === 'artist') html = this.artistHtml(sel.id);
     else if (sel.kind === 'building') html = this.buildingHtml(sel.id);
     else if (sel.kind === 'district') html = this.districtHtml(sel.genre);
+    else if (sel.kind === 'label') html = this.labelHtml(sel.id);
+    else if (sel.kind === 'busker') html = this.buskerHtml(sel.id);
     this.info.innerHTML = `<button type="button" class="icon-btn info__close" data-action="close-info" aria-label="Close">${ICONS.close}</button><div class="info__scroll">${html}</div>`;
     this.info.classList.add('is-open');
     this.info.setAttribute('aria-hidden', 'false');
@@ -381,6 +425,7 @@ export class Hud {
       <div class="info__section"><h4>Genre</h4><div class="tags">${v.genres.map(genreChip).join('')}</div></div>
       ${this.artistsList(v.artistIds)}
       <p class="info__desc">${esc(v.description)}</p>
+      ${v.type === 'record-store' ? `<button type="button" class="crate-cta" data-action="open-crate" data-id="${v.id}"><span class="crate-cta__stack" aria-hidden="true"><i></i><i></i><i></i></span><span><strong>Dig the crates</strong><small>Flip through the records. Each one plays a preview.</small></span></button>` : ''}
       ${this.listenBlock(v.artistIds, `venue:${v.id}`)}
       <div class="info__actions info__actions--secondary">
         <button type="button" class="btn btn--gold btn--sm" data-action="gig" data-kind="venue" data-id="${v.id}">Gig night</button>
@@ -535,6 +580,7 @@ export class Hud {
       </div>
       <div class="tracks" data-tracks-for="${a.id}">${this.trackCache.has(a.id) ? this.tracksHtml(a.id) : ''}</div>
       ${places.length ? `<div class="info__section"><h4>In your city</h4><ul class="places">${places.map((p) => `<li><button type="button" class="place" data-action="${p.kind}" data-id="${p.id}">${ICONS.pin}<span><strong>${esc(p.name)}</strong><small>${esc(p.sub)}</small></span></button></li>`).join('')}</ul></div>` : ''}
+      ${this.labelsForArtistHtml(a.id)}
       <div class="info__section"><h4>Connected artists</h4><ul class="artist-list">${links
         .map((n) => {
           const here = plan.artists.some((x) => x.id === n.id);
@@ -554,6 +600,64 @@ export class Hud {
       <p class="info__desc">${esc(g.description)}</p>
       <div class="tags">${genreChip(b.dominant)}${b.secondary && b.secondary !== b.dominant ? genreChip(b.secondary) : ''}</div>
       <p class="info__note">Venues and landmarks are marked by floating lights. Try clicking one, or use Discover.</p>`;
+  }
+
+  private artistName(id: string): string {
+    return ARTIST_BY_ID[id]?.name ?? this.plan?.artists.find((a) => a.id === id)?.name ?? '';
+  }
+
+  private labelsForArtistHtml(artistId: string): string {
+    const plan = this.plan!;
+    const labels = labelsFor(artistId);
+    if (!labels.length) return '';
+    return `<div class="info__section"><h4>Record labels</h4><ul class="artist-list">${labels
+      .map((l) => {
+        const tower = plan.labels.find((t) => t.labelId === l.id);
+        return tower
+          ? `<li><button type="button" class="artist-chip is-here" data-action="label" data-id="${tower.id}">${esc(l.name)} ${ICONS.pin}</button></li>`
+          : `<li><span class="artist-chip is-static">${esc(l.name)}</span></li>`;
+      })
+      .join('')}</ul></div>`;
+  }
+
+  private labelHtml(id: string): string {
+    const plan = this.plan!;
+    const t = plan.labels.find((x) => x.id === id);
+    const l = t ? LABEL_BY_ID[t.labelId] : undefined;
+    if (!t || !l) return '';
+    const away = l.artistIds.filter((a) => !t.artistIds.includes(a) && ARTIST_BY_ID[a]);
+    return `<p class="eyebrow">Record label</p>
+      <span class="badge badge--hist">Real record label</span>
+      <h3>${esc(l.name)}</h3>
+      <p class="info__meta">Founded ${l.founded} · ${esc(l.city)}<br>${esc(l.founders)}</p>
+      <p class="info__desc">${esc(l.blurb)}</p>
+      <p class="info__note">The label and the releases are real. The tower is a musical interpretation, and the lines show where its artists play in your city.</p>
+      ${this.artistsList(t.artistIds, 'Label artists in your city')}
+      ${this.listenBlock(t.artistIds, `label:${t.id}`)}
+      ${away.length ? `<div class="info__section"><h4>Also on the label</h4><ul class="artist-list">${away
+        .map((a) => `<li><button type="button" class="artist-chip is-away" data-action="artist" data-id="${a}" title="Not in your city yet">${esc(ARTIST_BY_ID[a].name)} <span aria-hidden="true">+</span></button></li>`)
+        .join('')}</ul></div>` : ''}
+      <div class="info__actions info__actions--secondary">
+        <button type="button" class="btn btn--ghost btn--sm" data-action="walk" data-kind="label" data-id="${t.id}">Walk here</button>
+      </div>`;
+  }
+
+  private buskerHtml(id: string): string {
+    const plan = this.plan!;
+    const b = plan.buskers.find((x) => x.id === id);
+    if (!b) return '';
+    const name = this.artistName(b.artistId);
+    return `<p class="eyebrow">Street busker</p>
+      <span class="badge badge--insp">Musical interpretation</span>
+      <h3>${esc(b.name)}</h3>
+      <p class="info__meta">${esc(INSTRUMENT_LABEL[b.instrument])} · ${esc(GENRES[b.genre].name)} District street corner</p>
+      <p class="info__desc">A fictional busker working through songs by ${esc(name)}. What you hear are official previews of the original recordings.</p>
+      ${this.listenBlock([b.artistId], `busker:${b.id}`)}
+      <div class="info__actions info__actions--secondary">
+        <button type="button" class="btn btn--gold btn--sm" data-action="tip" data-id="${b.id}">Toss a coin</button>
+        <button type="button" class="btn btn--ghost btn--sm" data-action="walk" data-kind="busker" data-id="${b.id}">Walk here</button>
+      </div>
+      ${this.artistsList([b.artistId], 'Playing songs by')}`;
   }
 
   private districtHtml(genre: GenreId): string {
