@@ -111,9 +111,80 @@ export function streamingLinks(artist: Artist, song?: string): { label: string; 
   ];
 }
 
+export interface SongRequest {
+  artist: Artist;
+  title: string;
+}
+
+/** Looks up one specific song on the iTunes Search API. */
+async function findSong(req: SongRequest, signal?: AbortSignal): Promise<Track | null> {
+  const url = `https://itunes.apple.com/search?${new URLSearchParams({
+    term: `${req.artist.name} ${req.title}`,
+    entity: 'song',
+    limit: '15',
+    country: 'US',
+  })}`;
+  const res = await fetch(url, { signal });
+  if (!res.ok) throw new Error(`iTunes search failed: ${res.status}`);
+  const json = (await res.json()) as { results?: ItunesResult[] };
+  const want = normalize(req.artist.name);
+  const aliases = (req.artist.aliases ?? []).map(normalize);
+  const title = normalize(req.title);
+  const candidates = (json.results ?? []).filter((r) => {
+    if (r.kind !== 'song' || !r.previewUrl || !r.trackName) return false;
+    const got = normalize(r.artistName ?? '');
+    return got === want || aliases.includes(got) || got.startsWith(want);
+  });
+  // Prefer an exact title, then a version whose title starts with it (e.g. "- Remastered").
+  const exact = candidates.find((r) => normalize(r.trackName ?? '') === title);
+  const loose = candidates.find((r) => normalize(r.trackName ?? '').startsWith(title));
+  const r = exact ?? loose;
+  if (!r) return null;
+  return {
+    title: r.trackName ?? req.title,
+    artist: r.artistName ?? req.artist.name,
+    album: r.collectionName,
+    previewUrl: r.previewUrl,
+    artworkUrl: r.artworkUrl100,
+    externalUrl: r.trackViewUrl,
+  };
+}
+
 export class MusicService {
   private cache = new Map<string, TrackResult>();
   private remoteHealthy = true;
+
+  /**
+   * Specific songs (e.g. a landmark's soundtrack), in order. Songs the preview
+   * service can't find still appear, linking out to streaming services.
+   */
+  async tracksForSongs(key: string, songs: SongRequest[]): Promise<TrackResult> {
+    const cached = this.cache.get(key);
+    if (cached) return cached;
+    const fallback = (s: SongRequest): Track => ({
+      title: s.title,
+      artist: s.artist.name,
+      externalUrl: streamingLinks(s.artist, s.title)[0].url,
+    });
+    if (!this.remoteHealthy) return { tracks: songs.map(fallback), source: 'Curated catalogue', degraded: true };
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 7000);
+    try {
+      const found = await Promise.allSettled(songs.map((s) => findSong(s, ctrl.signal)));
+      if (found.every((f) => f.status === 'rejected')) throw new Error('all lookups failed');
+      const tracks = found.map((f, i) => (f.status === 'fulfilled' && f.value ? f.value : fallback(songs[i])));
+      const result = { tracks, source: 'Apple Music previews', degraded: false };
+      this.cache.set(key, result);
+      return result;
+    } catch (err) {
+      console.warn('[music] soundtrack lookup failed, using curated data', err);
+      this.remoteHealthy = false;
+      setTimeout(() => (this.remoteHealthy = true), 60_000);
+      return { tracks: songs.map(fallback), source: 'Curated catalogue', degraded: true };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
 
   constructor(
     private remote: MusicProvider | null = new ItunesPreviewProvider(),
