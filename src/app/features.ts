@@ -1,5 +1,7 @@
 import { ARTIST_BY_ID } from '../data/artists.js';
 import { crateFor, type CrateRecord } from '../core/crate.js';
+import { plaqueFacts, type Tour, type TourStop } from '../core/tours.js';
+import { openCorners } from '../core/cityGenerator.js';
 import { GENRES } from '../data/genres.js';
 import { soundtrackArtist, splitInput } from '../core/resolve.js';
 import { store } from '../core/store.js';
@@ -8,7 +10,7 @@ import { hashString, mulberry32 } from '../core/random.js';
 import type { Nearby } from '../scene/walk.js';
 import { MOODS, MOOD_BY_ID, type MoodId } from '../scene/mood.js';
 import type { WalkKind } from '../ui/hud.js';
-import type { Artist, CityPlan, GenreId, Vec2 } from '../types.js';
+import type { Artist, BuskerPlan, CityPlan, GenreId, Vec2 } from '../types.js';
 import { $, ICONS, esc, toast } from '../ui/dom.js';
 import { composePoster } from '../ui/poster.js';
 import type { AppContext } from './context.js';
@@ -159,7 +161,14 @@ export function createWalkController(ctx: AppContext) {
     const track = ctx.player.current;
     const sourceName = useBusker ? `${n.busker!.name}, busking` : n.venue?.name;
     const ids = useBusker ? [n.busker!.artistId] : n.venue?.artistIds ?? [];
+    let plaque: string | null = null;
+    if (n.venue && n.venueDistance < 10 && plan) {
+      const facts = plaqueFacts(plan, n.venue.id);
+      if (facts.length) plaque = facts[Math.floor(performance.now() / 6000) % facts.length];
+    }
     ctx.hud.renderWalk(true, {
+      street: n.street ? { id: n.street.id, name: n.street.name } : null,
+      plaque,
       venue: sourceName,
       artist: track ? `${track.title} · ${track.artist}` : plan ? ids.map((id) => artistIn(plan, id)?.name).filter(Boolean).slice(0, 3).join(' · ') : undefined,
       distance: useBusker ? n.buskerDistance : n.venue ? n.venueDistance : undefined,
@@ -538,7 +547,7 @@ export function createCrateController(ctx: AppContext, addArtist: (id: string) =
   }
 
   return {
-    open(venueId: string) {
+    open(venueId: string, focusArtistId?: string) {
       const plan = store.get().plan;
       const v = plan?.venues.find((x) => x.id === venueId);
       if (!plan || !v) return;
@@ -547,6 +556,16 @@ export function createCrateController(ctx: AppContext, addArtist: (id: string) =
       $('#crate-title').textContent = 'Dig the crates';
       records = crateFor(plan, venueId);
       cur = 0;
+      const focus = focusArtistId ? ARTIST_BY_ID[focusArtistId] ?? plan.artists.find((a) => a.id === focusArtistId) : undefined;
+      if (focus?.album.title) {
+        let i = records.findIndex((r) => r.artist.id === focus.id);
+        if (i === -1) {
+          // Staff pick: the record you came in for sits at the front.
+          records.unshift({ artist: focus, title: focus.album.title, year: focus.album.year, genre: focus.genres[0] ?? v.genres[0], inCity: plan.artists.some((a) => a.id === focus.id) });
+          i = 0;
+        }
+        cur = i;
+      }
       playing = null;
       status = '';
       modal.hidden = false;
@@ -637,4 +656,244 @@ export function createMoodController(ctx: AppContext) {
     },
     play: () => play(ctx.scene.moodId),
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* Guided tours                                                        */
+/* ------------------------------------------------------------------ */
+
+export function createTourController(ctx: AppContext) {
+  let tour: Tour | null = null;
+  let index = 0;
+  let timer = 0;
+  let token = 0;
+
+  async function playStop(stop: TourStop) {
+    const plan = store.get().plan;
+    if (!plan) return;
+    const my = ++token;
+    let tracks: Track[] = [];
+    if (stop.song) {
+      const artist = soundtrackArtist(stop.song);
+      const res = await ctx.music.tracksForSongs(`tour:${stop.id}`, [{ artist, title: stop.song.title.replace(/[“”]/g, '') }]);
+      tracks = res.tracks;
+    } else if (stop.artistId) {
+      const artist = artistIn(plan, stop.artistId);
+      if (artist && !artist.custom) tracks = (await ctx.music.tracksFor(artist)).tracks;
+    }
+    if (my !== token || !tour) return;
+    const first = tracks.find((t) => t.previewUrl);
+    if (first) ctx.player.play(first);
+  }
+
+  function show() {
+    const plan = store.get().plan;
+    const city = ctx.scene.currentCity;
+    if (!tour || !plan || !city) return;
+    const stop = tour.stops[index];
+    const dist = stop.kind === 'label' ? 170 : stop.kind === 'home' ? 42 : 58;
+    ctx.scene.focus(stop.position, dist, stop.kind === 'label' ? 20 : 4, 2.2);
+    city.select(stop.position, stop.kind === 'landmark' ? '#ffcf6b' : stop.kind === 'home' ? '#8ff0c8' : '#c9b6ff', stop.kind === 'label' ? 9 : 7);
+    ctx.hud.renderTour({ name: tour.name, index, total: tour.stops.length, title: stop.title, sub: stop.sub, caption: stop.caption, auto: true });
+    void playStop(stop);
+    if (stop.kind === 'landmark') stampLandmark(ctx, stop.id);
+    window.clearTimeout(timer);
+    // Move on by itself after a while; the buttons skip ahead or back.
+    timer = window.setTimeout(() => api.step(1), 24000);
+  }
+
+  const api = {
+    get active() {
+      return !!tour;
+    },
+    start(id: string) {
+      const t = ctx.hud.tours.find((x) => x.id === id);
+      if (!t || !t.stops.length) return;
+      if (ctx.scene.walking) ctx.scene.exitWalk();
+      ctx.select(null);
+      store.set({ listOpen: false });
+      ctx.hud.setTab(store.get().tab, false);
+      tour = t;
+      index = 0;
+      show();
+    },
+    step(delta: number) {
+      if (!tour) return;
+      const next = index + delta;
+      if (next >= tour.stops.length) {
+        toast(`That’s the end of ${tour.name}. Thanks for coming along.`);
+        api.end();
+        return;
+      }
+      index = Math.max(0, next);
+      show();
+    },
+    end() {
+      if (!tour) return;
+      tour = null;
+      token++;
+      window.clearTimeout(timer);
+      ctx.scene.currentCity?.select(null);
+      ctx.hud.renderTour(null);
+    },
+  };
+  return api;
+}
+
+/* ------------------------------------------------------------------ */
+/* Your own street performance                                         */
+/* ------------------------------------------------------------------ */
+
+export function createPerformController(ctx: AppContext) {
+  let live: { corner: string; instrument: string; started: number; crowd: number; tips: number; queue: Track[]; peak: number } | null = null;
+  let loop = 0;
+
+  const userArtists = (plan: CityPlan) => plan.userArtistIds.map((id) => artistIn(plan, id)).filter((a): a is Artist => !!a && !a.custom);
+
+  function cornerName(plan: CityPlan, p: Vec2): string {
+    const near = (axis: 'x' | 'z') =>
+      plan.streets
+        .filter((s) => s.axis === axis && (axis === 'x' ? p.x : p.z) >= s.from - 2 && (axis === 'x' ? p.x : p.z) <= s.to + 2)
+        .sort((a, b) => Math.abs(a.c - (axis === 'x' ? p.z : p.x)) - Math.abs(b.c - (axis === 'x' ? p.z : p.x)))[0];
+    const a = near('x');
+    const b = near('z');
+    return a && b ? `Corner of ${a.name} & ${b.name}` : 'A street corner in your city';
+  }
+
+  function render() {
+    if (!live) return;
+    const cur = ctx.player.current;
+    ctx.hud.renderPerform({ phase: 'live', corner: live.corner, crowd: Math.round(live.crowd), tips: live.tips, song: cur ? `${cur.title} · ${cur.artist}` : '', instrument: live.instrument });
+  }
+
+  function tick() {
+    if (!live) return;
+    const t = (performance.now() - live.started) / 1000;
+    const playing = ctx.player.playing;
+    // People drift over while the music plays and wander off when it stops.
+    const target = playing ? Math.min(85, 50 * (1 - Math.exp(-t / 35)) + 32 * (1 - Math.exp(-t / 140))) : live.crowd * 0.9;
+    live.crowd += (target - live.crowd) * 0.25;
+    live.peak = Math.max(live.peak, live.crowd);
+    if (playing && Math.random() < live.crowd * 0.012) live.tips += [0.25, 0.25, 0.5, 1, 1, 2, 5][Math.floor(Math.random() * 7)];
+    ctx.scene.currentCity?.setAudience(live.crowd);
+    // Keep the set going when the queue runs out.
+    if (!ctx.player.current && live.queue.length && t > 4) ctx.player.playQueue(live.queue);
+    render();
+  }
+
+  const api = {
+    get active() {
+      return !!live;
+    },
+    open() {
+      const plan = store.get().plan;
+      if (!plan) return;
+      if (live) return;
+      if (ctx.scene.walking) ctx.scene.exitWalk();
+      ctx.select(null);
+      ctx.hud.renderPerform({ phase: 'setup', artists: userArtists(plan).map((a) => ({ id: a.id, name: a.name })) });
+    },
+    async start() {
+      const plan = store.get().plan;
+      const city = ctx.scene.currentCity;
+      if (!plan || !city) return;
+      const target = ctx.scene.lookTarget();
+      const corner = openCorners(plan).sort((a, b) => Math.hypot(a.p.x - target.x, a.p.z - target.z) - Math.hypot(b.p.x - target.x, b.p.z - target.z))[0];
+      if (!corner) {
+        toast('Couldn’t find a free corner here. Try looking at another part of town.');
+        return;
+      }
+      const choice = ctx.hud.performChoice;
+      const chosen = choice.artistId ? artistIn(plan, choice.artistId) : undefined;
+      const artists = chosen ? [chosen] : userArtists(plan).length ? userArtists(plan) : plan.artists.filter((a) => !a.custom).slice(0, 6);
+      const genre = plan.districts.slice().sort((a, b) => Math.hypot(a.center.x - corner.p.x, a.center.z - corner.p.z) - Math.hypot(b.center.x - corner.p.x, b.center.z - corner.p.z))[0]?.genre ?? plan.districts[0].genre;
+      const instrument = (choice.instrument || 'guitar') as BuskerPlan['instrument'];
+      city.startPerformance({ id: 'you', name: 'You', position: corner.p, rotation: corner.rot, artistId: artists[0]?.id ?? '', genre, instrument });
+      ctx.scene.focus(corner.p, 24, 1.5, 1.6);
+      live = { corner: cornerName(plan, corner.p), instrument: INSTRUMENT_NAMES[instrument] ?? instrument, started: performance.now(), crowd: 0, tips: 0, queue: [], peak: 0 };
+      render();
+      window.clearInterval(loop);
+      loop = window.setInterval(tick, 1000);
+      const res = await ctx.music.tracksForArtists(artists, chosen ? 6 : 1);
+      if (!live) return;
+      live.queue = res.tracks.filter((t) => t.previewUrl);
+      if (live.queue.length) ctx.player.playQueue(live.queue);
+      else toast('No previews available right now, but the crowd doesn’t mind.', 'warn');
+    },
+    next() {
+      if (!live) return;
+      if (!ctx.player.next() && live.queue.length) ctx.player.playQueue(live.queue);
+    },
+    end() {
+      window.clearInterval(loop);
+      ctx.scene.currentCity?.stopPerformance();
+      if (live) {
+        ctx.player.stop();
+        toast(`Set over. ${Math.round(live.peak)} people stopped to listen and you made $${live.tips.toFixed(2)}.`);
+      }
+      live = null;
+      ctx.hud.renderPerform(null);
+    },
+  };
+  return api;
+}
+
+const INSTRUMENT_NAMES: Record<string, string> = {
+  guitar: 'Acoustic guitar',
+  bass: 'Bass guitar',
+  sax: 'Saxophone',
+  trumpet: 'Trumpet',
+  keys: 'Keyboard',
+  drums: 'Street drums',
+  turntables: 'Portable decks',
+  mic: 'Vocals',
+  violin: 'Violin',
+};
+
+/* ------------------------------------------------------------------ */
+/* Visualiser                                                          */
+/* ------------------------------------------------------------------ */
+
+export function createVisualiserController(ctx: AppContext, startMusic: () => void) {
+  const BANDS = 16;
+  let prev = new Array<number>(BANDS).fill(0);
+  let silentFor = 0;
+
+  function levels(): number[] {
+    let real = ctx.player.levels(BANDS);
+    const playing = ctx.player.playing;
+    const sum = real.reduce((a, b) => a + b, 0);
+    silentFor = playing && sum === 0 ? silentFor + 1 : 0;
+    if (playing && silentFor > 20) {
+      // Audio can't be analysed (e.g. no CORS): fall back to a steady groove.
+      const t = performance.now() / 1000;
+      const beat = Math.pow(1 - ((t * 2.07) % 1), 3);
+      real = real.map((_, b) => Math.max(0, beat * (1 - b / BANDS) * 0.9 + 0.25 * Math.sin(t * (2 + b * 0.7) + b) * 0.5 + 0.1));
+    }
+    prev = real.map((v, i) => Math.max(v, prev[i] * 0.86));
+    return prev;
+  }
+
+  const api = {
+    on: false,
+    toggle() {
+      if (api.on) {
+        api.on = false;
+        ctx.scene.setVisualiser(null);
+        ctx.hud.setVisualiser(false);
+        return;
+      }
+      ctx.player.enableAnalysis();
+      api.on = true;
+      prev = new Array<number>(BANDS).fill(0);
+      ctx.scene.setVisualiser(levels);
+      ctx.hud.setVisualiser(true);
+      ctx.scene.overview(1.4);
+      if (!ctx.player.current) {
+        toast('Visualiser on. Playing your city so it has something to move to.');
+        startMusic();
+      } else toast('Visualiser on. The skyline follows the music, bass on the left, treble on the right.');
+    },
+  };
+  return api;
 }
