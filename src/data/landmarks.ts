@@ -1,0 +1,282 @@
+import type { HistoricalLandmark } from '../types.js';
+
+/**
+ * Historical music landmarks. Each is based on a real, documented place or
+ * event. The city renders a miniature *inspired by* the place; the text says
+ * what actually happened there. Descriptions stay short and conservative:
+ * where a detail is commonly disputed it is left out.
+ */
+export const HISTORICAL_LANDMARKS: HistoricalLandmark[] = [
+  {
+    id: 'beatles-rooftop',
+    name: 'The Rooftop Concert',
+    type: 'historical',
+    artistIds: ['the-beatles'],
+    place: 'Apple Corps, 3 Savile Row, London',
+    date: '30 January 1969',
+    description:
+      'The Beatles played their final public performance on the roof of their Apple Corps office until police arrived and asked them to turn it down.',
+    model: 'rooftop-stage',
+  },
+  {
+    id: 'beatles-abbey-road',
+    name: 'Abbey Road Crossing',
+    type: 'historical',
+    artistIds: ['the-beatles'],
+    place: 'Outside EMI Studios (now Abbey Road Studios), London',
+    date: '8 August 1969',
+    description:
+      'The zebra crossing photographed for the cover of Abbey Road, with the four Beatles walking in single file.',
+    model: 'crossing',
+  },
+  {
+    id: 'beatles-cavern',
+    name: 'The Cavern Club',
+    type: 'historical',
+    artistIds: ['the-beatles'],
+    place: '10 Mathew Street, Liverpool',
+    date: '1961–1963',
+    description:
+      'The cellar club where the Beatles played hundreds of lunchtime and evening shows before fame, and where Brian Epstein first saw them in 1961.',
+    model: 'cellar-club',
+  },
+  {
+    id: 'pistols-jubilee-boat',
+    name: 'The Jubilee Boat Trip',
+    type: 'historical',
+    artistIds: ['sex-pistols'],
+    place: 'River Thames, London',
+    date: '7 June 1977',
+    description:
+      'During the Queen’s Silver Jubilee the Sex Pistols played on a hired boat as it passed Parliament. Police met the boat when it docked and made arrests.',
+    model: 'boat',
+    onWater: true,
+  },
+  {
+    id: 'free-trade-hall',
+    name: 'Lesser Free Trade Hall',
+    type: 'historical',
+    artistIds: ['sex-pistols', 'buzzcocks', 'joy-division'],
+    place: 'Manchester',
+    date: '4 June 1976',
+    description:
+      'A small Sex Pistols show organised by Buzzcocks’ Howard Devoto and Pete Shelley. Future members of Joy Division were in the audience.',
+    model: 'hall',
+  },
+  {
+    id: 'bowie-hansa',
+    name: 'Hansa Studios by the Wall',
+    type: 'historical',
+    artistIds: ['david-bowie', 'iggy-pop', 'brian-eno'],
+    place: 'Hansa Tonstudio, West Berlin',
+    date: '1977',
+    description:
+      'The studio close to the Berlin Wall where Bowie recorded “Heroes” with Brian Eno, and where Iggy Pop recorded Lust for Life.',
+    model: 'studio-wall',
+  },
+  {
+    id: 'bowie-hammersmith',
+    name: 'Ziggy’s Last Stand',
+    type: 'historical',
+    artistIds: ['david-bowie'],
+    place: 'Hammersmith Odeon, London',
+    date: '3 July 1973',
+    description:
+      'At the end of the Ziggy Stardust tour Bowie told the crowd it was “the last show that we’ll ever do”: the retirement of Ziggy.',
+    model: 'theater',
+  },
+  {
+    id: 'clash-palladium',
+    name: 'The Palladium Bass Smash',
+    type: 'historical',
+    artistIds: ['the-clash'],
+    place: 'The Palladium, New York City',
+    date: '21 September 1979',
+    description:
+      'Pennie Smith photographed Paul Simonon smashing his bass on stage. The shot became the cover of London Calling.',
+    model: 'theater',
+  },
+  {
+    id: 'stooges-cincinnati',
+    name: 'Cincinnati Pop Festival',
+    type: 'historical',
+    artistIds: ['the-stooges', 'iggy-pop'],
+    place: 'Crosley Field, Cincinnati',
+    date: '13 June 1970',
+    description:
+      'Iggy Pop walked out onto the outstretched hands of the crowd during the Stooges’ set, a moment caught on television.',
+    model: 'festival-stage',
+  },
+  {
+    id: 'floyd-battersea',
+    name: 'Battersea Power Station',
+    type: 'historical',
+    artistIds: ['pink-floyd'],
+    place: 'Battersea, London',
+    date: 'December 1976',
+    description:
+      'Photographed for the cover of Animals (1977). During the shoot the giant inflatable pig broke free of its moorings and drifted away.',
+    model: 'power-station',
+    onWater: true,
+  },
+  {
+    id: 'floyd-ufo',
+    name: 'UFO Club',
+    type: 'historical',
+    artistIds: ['pink-floyd'],
+    place: 'Tottenham Court Road, London',
+    date: '1966–1967',
+    description:
+      'The short-lived underground club at the centre of London’s psychedelic scene, where Pink Floyd were regular headliners with liquid light shows.',
+    model: 'cellar-club',
+  },
+  {
+    id: 'stones-hyde-park',
+    name: 'Stones in the Park',
+    type: 'historical',
+    artistIds: ['the-rolling-stones'],
+    place: 'Hyde Park, London',
+    date: '5 July 1969',
+    description:
+      'A free concert two days after the death of founding member Brian Jones, played to an enormous crowd.',
+    model: 'park-stage',
+  },
+  {
+    id: 'queen-live-aid',
+    name: 'Live Aid at Wembley',
+    type: 'historical',
+    artistIds: ['queen', 'david-bowie'],
+    place: 'Wembley Stadium, London',
+    date: '13 July 1985',
+    description:
+      'Queen’s short Live Aid set is widely remembered as one of rock’s great live performances. Bowie also played that day.',
+    model: 'stadium',
+  },
+  {
+    id: 'cbgb',
+    name: 'CBGB',
+    type: 'historical',
+    artistIds: ['the-ramones', 'talking-heads', 'television', 'patti-smith', 'blondie'],
+    place: '315 Bowery, New York City',
+    date: '1973–2006',
+    description:
+      'The Bowery club that became the home of New York punk and new wave. Television, the Ramones, Patti Smith, Blondie and Talking Heads all played there early on.',
+    model: 'bowery-club',
+  },
+  {
+    id: 'stop-making-sense',
+    name: 'Pantages Theatre',
+    type: 'historical',
+    artistIds: ['talking-heads'],
+    place: 'Hollywood, Los Angeles',
+    date: 'December 1983',
+    description: 'Where Talking Heads filmed the concert film Stop Making Sense, directed by Jonathan Demme.',
+    model: 'theater',
+  },
+  {
+    id: 'warhol-factory',
+    name: 'The Factory',
+    type: 'historical',
+    artistIds: ['the-velvet-underground'],
+    place: 'Midtown Manhattan, New York City',
+    date: '1960s',
+    description:
+      'Andy Warhol’s silver-painted studio. Warhol managed the Velvet Underground and is credited as producer of their 1967 debut.',
+    model: 'silver-factory',
+  },
+  {
+    id: 'hacienda',
+    name: 'The Haçienda',
+    type: 'historical',
+    artistIds: ['new-order'],
+    place: 'Whitworth Street West, Manchester',
+    date: 'Opened May 1982',
+    description: 'The Manchester club run by Factory Records and part-funded by New Order.',
+    model: 'studio',
+  },
+  {
+    id: 'kling-klang',
+    name: 'Kling Klang Studio',
+    type: 'historical',
+    artistIds: ['kraftwerk'],
+    place: 'Düsseldorf',
+    date: 'From 1970',
+    description: 'Kraftwerk’s own studio, where they built instruments and recorded their classic albums.',
+    model: 'studio',
+  },
+  {
+    id: 'hendrix-woodstock',
+    name: 'Woodstock Closing Set',
+    type: 'historical',
+    artistIds: ['jimi-hendrix'],
+    place: 'Bethel, New York',
+    date: '18 August 1969',
+    description:
+      'Hendrix closed the Woodstock festival on its final morning, including his solo reworking of “The Star-Spangled Banner”.',
+    model: 'festival-stage',
+  },
+  {
+    id: 'whisky-a-go-go',
+    name: 'Whisky a Go Go',
+    type: 'historical',
+    artistIds: ['the-doors'],
+    place: 'Sunset Strip, West Hollywood',
+    date: '1966',
+    description: 'The Sunset Strip club where the Doors were the house band before their debut album.',
+    model: 'bowery-club',
+  },
+  {
+    id: 'live-at-leeds',
+    name: 'Live at Leeds',
+    type: 'historical',
+    artistIds: ['the-who'],
+    place: 'University of Leeds Refectory',
+    date: '14 February 1970',
+    description: 'The Who recorded the live album Live at Leeds in the university’s refectory hall.',
+    model: 'hall',
+  },
+  {
+    id: 'nirvana-unplugged',
+    name: 'MTV Unplugged in New York',
+    type: 'historical',
+    artistIds: ['nirvana'],
+    place: 'Sony Music Studios, New York City',
+    date: '18 November 1993',
+    description: 'Nirvana’s acoustic set, staged with lilies and candles, released as an album in 1994.',
+    model: 'studio',
+  },
+  {
+    id: 'salford-lads-club',
+    name: 'Salford Lads Club',
+    type: 'historical',
+    artistIds: ['the-smiths'],
+    place: 'Salford, Greater Manchester',
+    date: '1985',
+    description: 'The band were photographed outside the club for the inner sleeve of The Queen Is Dead (1986).',
+    model: 'hall',
+  },
+  {
+    id: 'depeche-rose-bowl',
+    name: 'Concert for the Masses',
+    type: 'historical',
+    artistIds: ['depeche-mode'],
+    place: 'Rose Bowl, Pasadena',
+    date: '18 June 1988',
+    description: 'The final show of the Music for the Masses tour, filmed for the documentary 101.',
+    model: 'stadium',
+  },
+  {
+    id: 'mc5-chicago',
+    name: 'Lincoln Park, 1968',
+    type: 'historical',
+    artistIds: ['mc5'],
+    place: 'Lincoln Park, Chicago',
+    date: 'August 1968',
+    description: 'MC5 played in the park during the protests around the Democratic National Convention.',
+    model: 'park-stage',
+  },
+];
+
+export function landmarksForArtist(artistId: string): HistoricalLandmark[] {
+  return HISTORICAL_LANDMARKS.filter((l) => l.artistIds.includes(artistId));
+}
