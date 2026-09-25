@@ -8,7 +8,8 @@ import { SCENES, type Passport } from '../core/passport.js';
 import { ownerLabel, type Comparison } from '../core/compare.js';
 import { HISTORICAL_LANDMARKS } from '../data/landmarks.js';
 import { LABEL_BY_ID, labelsFor } from '../data/labels.js';
-import type { Track, PlayerState } from '../music/musicService.js';
+import type { AlbumInfo, Track, PlayerState } from '../music/musicService.js';
+import { plaqueFacts, type Tour } from '../core/tours.js';
 import { streamingLinks } from '../music/musicService.js';
 import type { Archetype, Artist, CityPlan, GenreId, Instrument, Selection } from '../types.js';
 import { $, ICONS, esc, onAction } from './dom.js';
@@ -40,6 +41,18 @@ export interface HudActions {
   openCompare(): void;
   openPoster(): void;
   tip(buskerId: string): void;
+  listenStreet(streetId: string): void;
+  listenBillboard(billboardId: string): void;
+  crateForBillboard(billboardId: string): void;
+  playAlbum(artistId: string, albumId: number): void;
+  startTour(tourId: string): void;
+  tourStep(delta: number): void;
+  endTour(): void;
+  openPerform(): void;
+  startPerform(): void;
+  performNext(): void;
+  endPerform(): void;
+  toggleVisualiser(): void;
   openCrate(venueId: string): void;
   setMood(mood: string): void;
   playMood(): void;
@@ -97,6 +110,13 @@ export class Hud {
   hasNext: () => boolean = () => false;
   compare: Comparison | null = null;
   private playerState: PlayerState = { status: 'idle' };
+  /** Discographies by artist id (loaded on demand). */
+  private albums = new Map<string, AlbumInfo[] | 'loading' | 'error'>();
+  private albumPlaying = new Map<string, number>();
+  /** Real cover art for billboards once loaded. */
+  billboardArt = new Map<string, string>();
+  tours: Tour[] = [];
+  performChoice = { instrument: 'guitar', artistId: '' };
 
   constructor(private root: HTMLElement, private actions: HudActions) {
     onAction(root, (action, t) => this.handle(action, t));
@@ -122,6 +142,42 @@ export class Hud {
         return this.actions.select({ kind: 'busker', id: d.id ?? '' }, { fly: true });
       case 'tip':
         return this.actions.tip(d.id ?? '');
+      case 'home':
+        return this.actions.select({ kind: 'home', id: d.id ?? '' }, { fly: true });
+      case 'billboard':
+        return this.actions.select({ kind: 'billboard', id: d.id ?? '' }, { fly: true });
+      case 'street':
+        return this.actions.select({ kind: 'street', id: d.id ?? '' }, { fly: true });
+      case 'listen-street':
+        return this.actions.listenStreet(d.id ?? '');
+      case 'listen-billboard':
+        return this.actions.listenBillboard(d.id ?? '');
+      case 'crate-billboard':
+        return this.actions.crateForBillboard(d.id ?? '');
+      case 'play-album':
+        return this.actions.playAlbum(d.artist ?? '', Number(d.album));
+      case 'tour':
+        return this.actions.startTour(d.id ?? '');
+      case 'tour-prev':
+        return this.actions.tourStep(-1);
+      case 'tour-next':
+        return this.actions.tourStep(1);
+      case 'tour-end':
+        return this.actions.endTour();
+      case 'perform':
+        return this.actions.openPerform();
+      case 'perform-start':
+        return this.actions.startPerform();
+      case 'perform-next':
+        return this.actions.performNext();
+      case 'perform-end':
+        return this.actions.endPerform();
+      case 'perform-instrument':
+        this.performChoice.instrument = d.value ?? 'guitar';
+        this.root.querySelectorAll<HTMLElement>('[data-action="perform-instrument"]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.value === this.performChoice.instrument)));
+        return;
+      case 'visualiser':
+        return this.actions.toggleVisualiser();
       case 'open-crate':
         return this.actions.openCrate(d.id ?? '');
       case 'mood':
@@ -271,6 +327,11 @@ export class Hud {
             <span class="row__meta">${pct}%</span></button></li>`;
         })
         .join('');
+      if (plan.streets.length) {
+        body += `<li class="row-head">Streets named after songs</li>` + [...plan.streets].sort((a, b) => a.name.localeCompare(b.name))
+          .map((st) => `<li><button type="button" class="row" data-action="street" data-id="${st.id}"><span class="dot" style="background:#2f8f5a"></span><span class="row__main"><strong>${esc(st.name)}</strong><small>“${esc(st.song)}” · ${esc(this.artistName(st.artistId))}</small></span></button></li>`)
+          .join('');
+      }
       if (plan.mixed.length) {
         body += `<li class="row-head">Where styles blend</li>` + plan.mixed.map((m) => `<li><button type="button" class="row" data-action="district" data-genre="${m.genres[0]}"><span class="dot dot--mix" style="background:linear-gradient(90deg,${GENRES[m.genres[0]].style.neon[0]} 50%,${GENRES[m.genres[1]].style.neon[0]} 50%)"></span><span class="row__main"><strong>${esc(m.name)}</strong><small>Architecture from both scenes</small></span></button></li>`).join('');
       }
@@ -303,6 +364,12 @@ export class Hud {
         insp.map((l) => `<li><button type="button" class="row" data-action="landmark" data-id="${l.id}"><span class="badge badge--insp">Interp</span><span class="row__main"><strong>${esc(l.name)}</strong><small>${esc(GENRES[l.genres[0]].name)} District monument</small></span></button></li>`).join('');
     } else if (tab === 'passport') {
       body = this.passportHtml();
+    } else if (tab === 'tours') {
+      body = this.tours.length
+        ? this.tours
+            .map((t) => `<li><button type="button" class="row" data-action="tour" data-id="${esc(t.id)}"><span class="badge badge--hist">${t.stops.length}</span><span class="row__main"><strong>${esc(t.name)}</strong><small>${esc(t.description)}</small></span></button></li>`)
+            .join('')
+        : '<li class="scene-desc">Tours need a few landmarks. Add more artists (or use Discover) to unlock them.</li>';
     } else {
       const users = plan.artists.filter((a) => plan.userArtistIds.includes(a.id) || a.custom);
       const others = plan.artists.filter((a) => !plan.userArtistIds.includes(a.id) && !a.custom);
@@ -322,9 +389,14 @@ export class Hud {
       } else {
         body = (users.length ? `<li class="row-head">Your artists</li>${users.map(row).join('')}` : '') + `<li class="row-head">Also in town</li>${others.map(row).join('')}`;
       }
+      if (plan.homes.length) {
+        body += `<li class="row-head">Artist homes</li>` + plan.homes
+          .map((h) => `<li><button type="button" class="row" data-action="home" data-id="${h.id}"><span class="dot" style="background:#8ff0c8"></span><span class="row__main"><strong>${esc(this.artistName(h.artistId))}’s place</strong><small>${esc(cap(h.style))} · ${esc(GENRES[h.genre].name)} District</small></span></button></li>`)
+          .join('');
+      }
     }
     $('#explorer-list').innerHTML = body;
-    $('#explorer-title').textContent = tab === 'passport' ? 'Landmark passport' : cap(tab);
+    $('#explorer-title').textContent = tab === 'passport' ? 'Landmark passport' : tab === 'tours' ? 'Guided tours' : cap(tab);
   }
 
   /* ---------------- build overlay ---------------- */
@@ -369,6 +441,9 @@ export class Hud {
     else if (sel.kind === 'district') html = this.districtHtml(sel.genre);
     else if (sel.kind === 'label') html = this.labelHtml(sel.id);
     else if (sel.kind === 'busker') html = this.buskerHtml(sel.id);
+    else if (sel.kind === 'home') html = this.homeHtml(sel.id);
+    else if (sel.kind === 'billboard') html = this.billboardHtml(sel.id);
+    else if (sel.kind === 'street') html = this.streetHtml(sel.id);
     this.info.innerHTML = `<button type="button" class="icon-btn info__close" data-action="close-info" aria-label="Close">${ICONS.close}</button><div class="info__scroll">${html}</div>`;
     this.info.classList.add('is-open');
     this.info.setAttribute('aria-hidden', 'false');
@@ -427,6 +502,7 @@ export class Hud {
       <p class="info__desc">${esc(v.description)}</p>
       ${v.type === 'record-store' ? `<button type="button" class="crate-cta" data-action="open-crate" data-id="${v.id}"><span class="crate-cta__stack" aria-hidden="true"><i></i><i></i><i></i></span><span><strong>Dig the crates</strong><small>Flip through the records. Each one plays a preview.</small></span></button>` : ''}
       ${this.listenBlock(v.artistIds, `venue:${v.id}`)}
+      ${this.plaquesHtml(v.id)}
       <div class="info__actions info__actions--secondary">
         <button type="button" class="btn btn--gold btn--sm" data-action="gig" data-kind="venue" data-id="${v.id}">Gig night</button>
         <button type="button" class="btn btn--ghost btn--sm" data-action="walk" data-kind="venue" data-id="${v.id}">Walk here</button>
@@ -513,17 +589,21 @@ export class Hud {
       </div>`;
   }
 
-  /** Walking HUD: what's playing nearby and any landmark close by. */
-  renderWalk(active: boolean, now?: { venue?: string; artist?: string; distance?: number; landmark?: { id: string; name: string } | null }): void {
+  /** Walking HUD: what's playing nearby, the street you're on, plaques and landmarks. */
+  renderWalk(active: boolean, now?: { venue?: string; artist?: string; distance?: number; landmark?: { id: string; name: string } | null; street?: { id: string; name: string } | null; plaque?: string | null }): void {
     $('#walk-hud').hidden = !active;
     this.root.classList.toggle('is-walking', active);
     const el = $('#walk-now');
-    if (!active || !now || (!now.venue && !now.landmark)) {
+    const street = $('#walk-street');
+    street.hidden = !active || !now?.street;
+    if (now?.street) street.innerHTML = `<button type="button" data-action="street" data-id="${esc(now.street.id)}"><span class="walk-street__sign">${esc(now.street.name)}</span></button>`;
+    if (!active || !now || (!now.venue && !now.landmark && !now.plaque)) {
       el.hidden = true;
       return;
     }
     el.hidden = false;
     el.innerHTML = `${now.venue ? `<div class="walk-now__row"><span class="walk-now__eq" aria-hidden="true"><i></i><i></i><i></i></span><div><strong>${esc(now.artist ?? '')}</strong><small>from ${esc(now.venue)}${now.distance !== undefined ? ` · ${Math.round(now.distance)} m away` : ''}</small></div></div>` : ''}
+      ${now.plaque ? `<p class="walk-now__plaque"><span aria-hidden="true">▣</span> ${esc(now.plaque)}</p>` : ''}
       ${now.landmark ? `<button type="button" class="walk-now__lm" data-action="landmark" data-id="${esc(now.landmark.id)}">★ ${esc(now.landmark.name)} is here · open</button>` : ''}`;
   }
 
@@ -658,6 +738,155 @@ export class Hud {
         <button type="button" class="btn btn--ghost btn--sm" data-action="walk" data-kind="busker" data-id="${b.id}">Walk here</button>
       </div>
       ${this.artistsList([b.artistId], 'Playing songs by')}`;
+  }
+
+  private plaquesHtml(venueId: string): string {
+    const facts = plaqueFacts(this.plan!, venueId);
+    if (!facts.length) return '';
+    return `<div class="info__section"><h4>Plaques by the door</h4><ul class="plaques">${facts.map((f) => `<li>${esc(f)}</li>`).join('')}</ul></div>`;
+  }
+
+  private homeHtml(id: string): string {
+    const plan = this.plan!;
+    const h = plan.homes.find((x) => x.id === id);
+    const a = h ? ARTIST_BY_ID[h.artistId] ?? plan.artists.find((x) => x.id === h.artistId) : undefined;
+    if (!h || !a) return '';
+    const key = `home:${a.id}`;
+    return `<p class="eyebrow">Artist home</p>
+      <span class="badge badge--insp">Musical interpretation</span>
+      <h3>${esc(a.name)}’s place</h3>
+      <p class="info__meta">${esc(a.origin)}${a.since ? ` · making records since ${a.since}` : ''}</p>
+      <div class="tags">${a.genres.map(genreChip).join('')}</div>
+      <p class="info__desc">${esc(a.blurb)}</p>
+      <p class="info__note">An imagined home in your city, not where ${esc(a.name)} really lives. The facts and records are real.</p>
+      <div class="info__section"><h4>Discography</h4><div data-disco-for="${esc(a.id)}">${this.discoHtml(a.id)}</div></div>
+      <div class="tracks" data-tracks-for="${esc(key)}">${this.trackCache.has(key) ? this.tracksHtml(key) : ''}</div>
+      <div class="info__actions info__actions--secondary">
+        <button type="button" class="btn btn--ghost btn--sm" data-action="artist" data-id="${esc(a.id)}">Where they play</button>
+      </div>`;
+  }
+
+  private discoHtml(artistId: string): string {
+    const list = this.albums.get(artistId);
+    if (!list || list === 'loading') return '<p class="tracks__loading">Pulling records off the shelf…</p>';
+    const a = ARTIST_BY_ID[artistId] ?? this.plan?.artists.find((x) => x.id === artistId);
+    if (list === 'error' || !list.length) {
+      return a?.album.title ? `<p class="album"><strong>${esc(a.album.title)}</strong> (${a.album.year})</p><p class="tracks__source">Music data unavailable, showing the curated album.</p>` : '<p class="tracks__source">No albums found.</p>';
+    }
+    const on = this.albumPlaying.get(artistId);
+    return `<ul class="discography">${list
+      .map((al) => `<li><button type="button" class="album-tile ${on === al.id ? 'is-on' : ''}" data-action="play-album" data-artist="${esc(artistId)}" data-album="${al.id}">
+        ${al.artwork ? `<img src="${esc(al.artwork)}" alt="" loading="lazy">` : '<span class="album-tile__blank"></span>'}
+        <strong>${esc(al.title)}</strong><small>${al.year || ''}</small></button></li>`)
+      .join('')}</ul>`;
+  }
+
+  setAlbums(artistId: string, value: AlbumInfo[] | 'loading' | 'error'): void {
+    this.albums.set(artistId, value);
+    this.info.querySelectorAll<HTMLElement>(`[data-disco-for="${artistId}"]`).forEach((el) => (el.innerHTML = this.discoHtml(artistId)));
+  }
+
+  albumsState(artistId: string): AlbumInfo[] | 'loading' | 'error' | undefined {
+    return this.albums.get(artistId);
+  }
+
+  markAlbum(artistId: string, albumId: number): void {
+    this.albumPlaying.set(artistId, albumId);
+    this.setAlbums(artistId, this.albums.get(artistId) ?? 'loading');
+  }
+
+  private billboardHtml(id: string): string {
+    const plan = this.plan!;
+    const b = plan.billboards.find((x) => x.id === id);
+    if (!b) return '';
+    const art = this.billboardArt.get(id);
+    return `<p class="eyebrow">Billboard</p>
+      <h3>${esc(b.title)}</h3>
+      <p class="info__meta">${esc(this.artistName(b.artistId))}${b.year ? ` · ${b.year}` : ''}</p>
+      ${art ? `<img class="cover" src="${esc(art)}" alt="Cover of ${esc(b.title)}">` : ''}
+      <div class="info__actions">
+        <button type="button" class="btn btn--primary btn--sm" data-action="listen-billboard" data-id="${esc(id)}">${ICONS.play} Play the album</button>
+        <button type="button" class="btn btn--gold btn--sm" data-action="crate-billboard" data-id="${esc(id)}">Find it in the crates</button>
+      </div>
+      <div class="tracks" data-tracks-for="${esc(`bb:${id}`)}">${this.trackCache.has(`bb:${id}`) ? this.tracksHtml(`bb:${id}`) : ''}</div>
+      ${this.artistsList([b.artistId], 'Artist')}`;
+  }
+
+  private streetHtml(id: string): string {
+    const plan = this.plan!;
+    const st = plan.streets.find((x) => x.id === id);
+    if (!st) return '';
+    const on = (p: { x: number; z: number }) => {
+      const across = st.axis === 'x' ? Math.abs(p.z - st.c) : Math.abs(p.x - st.c);
+      return across < plan.pitch * 0.62;
+    };
+    const places = [
+      ...plan.venues.filter((v) => on(v.position)).map((v) => ({ kind: 'venue', id: v.id, name: v.name, sub: cap(venueTypeLabel(v.type)) })),
+      ...plan.landmarks.filter((l) => on(l.position)).map((l) => ({ kind: 'landmark', id: l.id, name: l.name, sub: l.type === 'historical' ? 'Historical landmark' : 'Interpretation' })),
+      ...plan.labels.filter((t) => on(t.position)).map((t) => ({ kind: 'label', id: t.id, name: t.name, sub: 'Record label' })),
+      ...plan.homes.filter((h) => on(h.position)).map((h) => ({ kind: 'home', id: h.id, name: `${this.artistName(h.artistId)}’s place`, sub: 'Artist home' })),
+    ].slice(0, 10);
+    return `<p class="eyebrow">Street</p>
+      <span class="street-sign">${esc(st.name)}</span>
+      <p class="info__meta">Named after “${esc(st.song)}” by ${esc(this.artistName(st.artistId))} · ${esc(GENRES[st.genre].name)} District</p>
+      <div class="info__actions"><button type="button" class="btn btn--primary btn--sm" data-action="listen-street" data-id="${esc(id)}">${ICONS.play} Play “${esc(st.song)}”</button></div>
+      <div class="tracks" data-tracks-for="${esc(`street:${id}`)}">${this.trackCache.has(`street:${id}`) ? this.tracksHtml(`street:${id}`) : ''}</div>
+      ${places.length ? `<div class="info__section"><h4>On this street</h4><ul class="places">${places.map((p) => `<li><button type="button" class="place" data-action="${p.kind}" data-id="${p.id}">${ICONS.pin}<span><strong>${esc(p.name)}</strong><small>${esc(p.sub)}</small></span></button></li>`).join('')}</ul></div>` : ''}`;
+  }
+
+  /** Floating card for a guided tour. */
+  renderTour(t: { name: string; index: number; total: number; title: string; sub: string; caption: string; auto: boolean } | null): void {
+    const el = $('#tour');
+    this.root.classList.toggle('is-touring', !!t);
+    if (!t) {
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
+    el.innerHTML = `<div class="tour__head"><span class="tour__badge">Tour · ${esc(t.name)}</span><span class="tour__count">${t.index + 1} / ${t.total}</span></div>
+      <strong class="tour__title">${esc(t.title)}</strong>
+      <small class="tour__sub">${esc(t.sub)}</small>
+      <p class="tour__caption">${esc(t.caption)}</p>
+      <span class="tour__progress"><i style="width:${((t.index + 1) / t.total) * 100}%"></i></span>
+      <div class="tour__actions">
+        <button type="button" class="btn btn--ghost btn--xs" data-action="tour-prev" ${t.index === 0 ? 'disabled' : ''}>← Back</button>
+        <button type="button" class="btn btn--primary btn--xs" data-action="tour-next">${t.index + 1 === t.total ? 'Finish' : 'Next stop →'}</button>
+        <button type="button" class="btn btn--ghost btn--xs" data-action="tour-end">End tour</button>
+      </div>`;
+  }
+
+  /** Setup and live card for your own street performance. */
+  renderPerform(state: { phase: 'setup'; artists: { id: string; name: string }[] } | { phase: 'live'; corner: string; crowd: number; tips: number; song: string; instrument: string } | null): void {
+    const el = $('#perform');
+    this.root.classList.toggle('is-performing', !!state && state.phase === 'live');
+    if (!state) {
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
+    if (state.phase === 'setup') {
+      const inst = Object.entries(INSTRUMENT_LABEL);
+      el.innerHTML = `<div class="tour__head"><span class="tour__badge">Busk on a corner</span><button type="button" class="icon-btn" data-action="perform-end" aria-label="Close">${ICONS.close}</button></div>
+        <p class="perform__lede">Pick an instrument and whose songs to play. We’ll find an open corner near where you’re looking.</p>
+        <div class="perform__chips">${inst.map(([k, label]) => `<button type="button" class="chip-btn" data-action="perform-instrument" data-value="${k}" aria-pressed="${k === this.performChoice.instrument}">${esc(label)}</button>`).join('')}</div>
+        <label class="field perform__field"><span>Play songs by</span><select id="perform-artist"><option value="">Your whole taste (a mix)</option>${state.artists.map((a) => `<option value="${esc(a.id)}" ${a.id === this.performChoice.artistId ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
+        <div class="tour__actions"><button type="button" class="btn btn--gold btn--sm" data-action="perform-start">Start busking</button></div>`;
+      el.querySelector<HTMLSelectElement>('#perform-artist')?.addEventListener('change', (e) => (this.performChoice.artistId = (e.target as HTMLSelectElement).value));
+      return;
+    }
+    el.innerHTML = `<div class="tour__head"><span class="tour__badge"><i class="gig-dot"></i>You’re busking</span><span class="tour__count">${esc(state.instrument)}</span></div>
+      <small class="tour__sub">${esc(state.corner)}</small>
+      <div class="perform__stats"><div><strong>${state.crowd}</strong><small>watching</small></div><div><strong>$${state.tips.toFixed(2)}</strong><small>in the case</small></div></div>
+      <p class="tour__caption">${state.song ? `▶ ${esc(state.song)}` : 'Tuning up…'}</p>
+      <div class="tour__actions">
+        <button type="button" class="btn btn--ghost btn--xs" data-action="perform-next">Next song</button>
+        <button type="button" class="btn btn--ghost btn--xs" data-action="perform-end">End set</button>
+      </div>`;
+  }
+
+  setVisualiser(on: boolean): void {
+    $('#viz-btn').setAttribute('aria-pressed', String(on));
+    this.root.classList.toggle('is-viz', on);
   }
 
   private districtHtml(genre: GenreId): string {
