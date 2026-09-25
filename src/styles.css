@@ -1684,3 +1684,26 @@ button.chain__item:hover,
     animation-duration: 0.01ms !important;
   }
 }
+
+.soundtrack {
+  padding: 12px 12px 4px;
+  margin-top: 14px;
+  border-radius: 8px;
+  background: rgba(255, 207, 107, 0.05);
+  border: 1px solid rgba(255, 207, 107, 0.18);
+}
+
+.soundtrack h4 {
+  color: var(--hist);
+}
+
+.soundtrack__note {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.songs__by {
+  color: var(--faint);
+}

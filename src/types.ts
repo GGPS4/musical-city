@@ -14,7 +14,9 @@ export type GenreId =
   | 'garage'
   | 'electronic'
   | 'new-wave'
-  | 'art-rock';
+  | 'art-rock'
+  | 'hard-rock'
+  | 'indie';
 
 export interface Song {
   title: string;
@@ -110,7 +112,9 @@ export type MonumentKind =
   | 'fuzz-box'
   | 'feedback-arch'
   | 'synth-pavilion'
-  | 'gallery-cube';
+  | 'gallery-cube'
+  | 'flying-v'
+  | 'cassette';
 
 export type LandmarkModel =
   | 'rooftop-stage'
@@ -128,6 +132,14 @@ export type LandmarkModel =
   | 'silver-factory'
   | 'studio';
 
+/** Music tied to a landmark: the album/songs connected to that place or event. */
+export interface Soundtrack {
+  album?: { title: string; year: number; artistId: string };
+  songs: { title: string; artistId: string }[];
+  /** Short note on how the music relates to the place. */
+  note: string;
+}
+
 export interface HistoricalLandmark {
   id: string;
   name: string;
@@ -138,6 +150,7 @@ export interface HistoricalLandmark {
   date: string;
   description: string;
   model: LandmarkModel;
+  soundtrack: Soundtrack;
   /** Placed on the river instead of a block. */
   onWater?: boolean;
 }
@@ -230,6 +243,7 @@ export interface LandmarkPlan {
   rotation: number;
   model: LandmarkModel | MonumentKind;
   footprint: number;
+  soundtrack?: Soundtrack;
 }
 
 export interface Connection {

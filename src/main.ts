@@ -150,6 +150,20 @@ function boot() {
       const first = result.tracks.find((t) => t.previewUrl);
       if (first) player.play(first);
     },
+    async listenLandmark(landmarkId) {
+      const l = store.get().plan?.landmarks.find((x) => x.id === landmarkId);
+      if (!l?.soundtrack) return;
+      const key = `lm:${l.id}`;
+      const songs = l.soundtrack.songs
+        .map((s) => ({ artist: ARTIST_BY_ID[s.artistId], title: s.title.replace(/[“”]/g, '') }))
+        .filter((s): s is { artist: Artist; title: string } => !!s.artist);
+      hud.setTracks(key, 'loading');
+      const result = await music.tracksForSongs(key, songs);
+      hud.setTracks(key, result);
+      if (result.degraded) toast('Music data unavailable. Showing curated city data.', 'warn');
+      const first = result.tracks.find((t) => t.previewUrl);
+      if (first) player.play(first);
+    },
     playTrack: (t) => player.play(t),
     togglePlayer: () => player.toggle(),
     stopPlayer: () => player.stop(),
