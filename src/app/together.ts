@@ -60,6 +60,7 @@ export function createTogetherController(ctx: AppContext, shareUrl: () => string
   let conns: Conn[] = [];
   let me = { id: '', name: '', color: COLORS[Math.floor(Math.random() * COLORS.length)] };
   const people = new Map<string, FriendState & { where?: string; seen: number }>();
+  const greeted = new Set<string>();
   let status = '';
   let loop = 0;
   let waveCount = 0;
@@ -170,7 +171,8 @@ export function createTogetherController(ctx: AppContext, shareUrl: () => string
       const isNew = !people.has(m.id);
       people.set(m.id, { ...m, seen: performance.now() });
       if (isNew) {
-        toast(`${m.name} joined the room.`);
+        if (!greeted.has(m.id)) toast(`${m.name} joined the room.`);
+        greeted.add(m.id);
         render();
       }
     } else if (m.t === 'bye') {
@@ -269,10 +271,11 @@ export function createTogetherController(ctx: AppContext, shareUrl: () => string
   function tick() {
     if (!peer || !me.id) return;
     broadcast({ t: 'state', ...self() });
-    // Drop people we haven't heard from in a while.
+    // Drop people we haven't heard from in a long while (background tabs send
+    // updates rarely, so be patient; closed connections are removed right away).
     const now = performance.now();
     for (const [id, p] of people) {
-      if (now - p.seen > 12000) {
+      if (now - p.seen > 90000) {
         people.delete(id);
         pushToScene();
       }
