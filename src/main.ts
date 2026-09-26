@@ -22,6 +22,11 @@ import type { AppContext } from './app/context.js';
 import { createCompareController, createCrateController, createGigController, createMoodController, createPerformController, createPosterController, createAmbienceController, createTourController, createVisualiserController, createWalkController, stampLandmark } from './app/features.js';
 import { toursFor } from './core/tours.js';
 import { createTogetherController } from './app/together.js';
+import { createLookController } from './app/look.js';
+import { createMinimap } from './app/minimap.js';
+import { LIGHTERS } from './scene/lighters.js';
+import type { Emote } from './scene/avatar.js';
+import type { Track } from './music/musicService.js';
 import type { MoodId } from './scene/mood.js';
 
 function webglAvailable(): boolean {
@@ -60,6 +65,12 @@ function boot() {
     onBuildProgress: (t) => hud.buildProgress(t, TIMELINE.done),
     onBuildComplete: () => buildComplete(),
     onNearby: (n) => walk.onNearby(n),
+    onPit: (inPit) => {
+      if (inPit) {
+        toast('You’re in the mosh pit. Walk out to escape.');
+        ambience.cheer(0.5);
+      }
+    },
   });
 
   const setPhase = (phase: 'landing' | 'building' | 'city') => {
@@ -361,7 +372,10 @@ function boot() {
       perform.end();
       walk.enter(kind, id);
     },
-    exitWalk: () => walk.exit(),
+    exitWalk: () => {
+      $('#request').hidden = true;
+      walk.exit();
+    },
     openCompare: () => compareUi.open(),
     openPoster: () => void poster.open(),
     tip(buskerId) {
@@ -465,8 +479,48 @@ function boot() {
       select(null);
       walk.enterVenue(id);
     },
-    leaveVenue: () => walk.leaveVenue(),
+    leaveVenue: () => {
+      $('#request').hidden = true;
+      walk.leaveVenue();
+    },
     toggleAmbience: () => ambience.toggle(),
+    emote(kind) {
+      const k = kind as Emote;
+      if (!scene.walking) {
+        toast('Emotes work while walking. Press Walk, then 1–4 or the emote buttons.');
+        return;
+      }
+      scene.emote(k);
+      together.emote(k);
+      if ((k === 'headbang' || k === 'surf') && scene.insideVenue) ambience.cheer(0.4);
+      if (k === 'surf' && !scene.insideVenue) toast('Crowd-surfing works best inside a venue, over the crowd.');
+    },
+    async openRequests(venueId) {
+      const plan = store.get().plan;
+      const v = plan?.venues.find((x) => x.id === venueId);
+      if (!plan || !v) return;
+      const key = `req:${v.id}`;
+      hud.renderRequests(v.name, key, 'loading');
+      const artists = v.artistIds.map(findArtist).filter((a): a is Artist => !!a && !a.custom);
+      const res = await music.tracksForArtists(artists, 3);
+      const tracks = res.tracks.filter((t) => t.previewUrl);
+      requestCache.set(key, tracks);
+      hud.renderRequests(v.name, key, { tracks });
+    },
+    requestSong(key, index) {
+      const tracks = requestCache.get(key);
+      const t = tracks?.[index];
+      if (!tracks || !t) return;
+      if (player.locked) {
+        player.onBlocked?.();
+        return;
+      }
+      player.playQueue(tracks, index);
+      scene.cheer(1);
+      ambience.cheer(1);
+      $('#request').hidden = true;
+      toast(`By request: “${t.title}”. The crowd goes wild.`);
+    },
     openTogether: () => together.open(),
   };
 
@@ -543,7 +597,8 @@ function boot() {
   const crate = createCrateController(ctx, (id) => actions.addArtist(id));
   const mood = createMoodController(ctx);
   const tours = createTourController(ctx);
-  const perform = createPerformController(ctx);
+  const look = createLookController();
+  const perform = createPerformController(ctx, () => look.look);
   const viz = createVisualiserController(ctx, () => void mood.play());
   const ambience = createAmbienceController(ctx);
   /** A short "where are you" line for the people in your room. */
@@ -569,7 +624,58 @@ function boot() {
       walk.enterAt(p);
     },
     goToVenue: (id) => actions.enterVenue(id),
+    look: () => look.look,
+    openLook: () => look.open(),
   });
+  createMinimap(ctx, () => together.friends());
+
+  // Analyse the music (for the visualiser and "lighters up") once the browser allows audio.
+  window.addEventListener('pointerdown', () => player.enableAnalysis(), { once: true });
+
+  // Lighters up for slow songs: count bass hits over the last few seconds.
+  {
+    let prevBass = 0;
+    let lastHit = 0;
+    const hits: number[] = [];
+    let playingSince = 0;
+    let lighterToast = 0;
+    window.setInterval(() => {
+      const now = performance.now();
+      const playing = player.playing;
+      if (!playing) playingSince = 0;
+      else if (!playingSince) playingSince = now;
+      let slow = false;
+      if (playing) {
+        const lv = player.levels(8);
+        const bass = (lv[0] + lv[1]) / 2;
+        const loud = lv.reduce((a, b) => a + b, 0) / lv.length;
+        if (bass - prevBass > 0.07 && now - lastHit > 240) {
+          hits.push(now);
+          lastHit = now;
+        }
+        prevBass = bass * 0.6 + prevBass * 0.4;
+        while (hits.length && now - hits[0] > 8000) hits.shift();
+        const listened = now - playingSince;
+        // Slow: few beats per second, but not silence (so we know we can hear it).
+        slow = listened > 7000 && loud > 0.02 && hits.length / Math.min(8, listened / 1000) < 1.05;
+      }
+      LIGHTERS.level += ((slow ? 1 : 0) - LIGHTERS.level) * 0.06;
+      const crowd = !!scene.insideVenue || scene.currentCity?.gigActive || perform.active;
+      if (slow && crowd && LIGHTERS.level > 0.5 && now - lighterToast > 90000) {
+        lighterToast = now;
+        toast('A slow one. Lighters up.');
+      }
+    }, 150);
+  }
+
+  // Emote keys while walking: 1 headbang, 2 air guitar, 3 dance, 4 crowd-surf.
+  window.addEventListener('keydown', (e) => {
+    if (!scene.walking || e.target instanceof HTMLInputElement) return;
+    const kinds: Emote[] = ['headbang', 'airguitar', 'dance', 'surf'];
+    const i = ['1', '2', '3', '4'].indexOf(e.key);
+    if (i >= 0) actions.emote(kinds[i]);
+  });
+  const requestCache = new Map<string, Track[]>();
 
   /** Swaps billboard sleeves for real covers, one request at a time to stay polite to the API. */
   const loadBillboardArt = async (plan: NonNullable<ReturnType<typeof store.get>['plan']>) => {
