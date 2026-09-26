@@ -126,6 +126,12 @@
 
         <div id="together" class="panel together" hidden></div>
 
+        <div id="look" class="panel look-panel" hidden></div>
+
+        <div id="request" class="panel request" hidden></div>
+
+        <canvas id="minimap" class="minimap" width="360" height="360" hidden aria-label="Mini-map"></canvas>
+
         <div id="walk-hud" class="walk-hud" hidden>
           <div class="walk-hud__top">
             <span class="walk-hud__title">Walking</span>
@@ -133,6 +139,12 @@
             <button type="button" class="btn btn--ghost btn--sm" data-action="exit-walk">Exit (Esc)</button>
           </div>
           <div id="walk-street" class="walk-street" hidden></div>
+          <div class="emotes" role="group" aria-label="Emotes">
+            <button type="button" class="emote-btn" data-action="emote" data-emote="headbang" title="Headbang (1)"><span aria-hidden="true">🤘</span><small>Headbang <kbd>1</kbd></small></button>
+            <button type="button" class="emote-btn" data-action="emote" data-emote="airguitar" title="Air guitar (2)"><span aria-hidden="true">🎸</span><small>Air guitar <kbd>2</kbd></small></button>
+            <button type="button" class="emote-btn" data-action="emote" data-emote="dance" title="Dance (3)"><span aria-hidden="true">🕺</span><small>Dance <kbd>3</kbd></small></button>
+            <button type="button" class="emote-btn" data-action="emote" data-emote="surf" title="Crowd-surf (4)"><span aria-hidden="true">🙌</span><small>Crowd-surf <kbd>4</kbd></small></button>
+          </div>
           <div id="walk-now" class="panel walk-now" hidden></div>
           <div id="walk-stick" class="walk-stick" aria-hidden="true"><i></i></div>
         </div>

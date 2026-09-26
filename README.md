@@ -22,8 +22,12 @@ Type in a few artists or genres (try *The Beatles, David Bowie, The Clash, The S
 - **Busk on a corner.** Pick an instrument and whose songs to play, and you busk on the nearest free corner. A crowd gathers while the music plays, and tips land in your case.
 - **Visualiser.** The skyline becomes a spectrum analyser: buildings stretch with the music (bass on the left, treble on the right) and windows flash on the beat. It reads the real preview audio through Web Audio.
 - **Step inside venues.** Walk up to any venue and press Enter (or use *Step inside*) to go in. Each type has its own interior: sticky-floored bars, clubs with light-up floors and a mirror ball, theatres with seats and curtains, warehouses, rooftop stages under the stars, and record stores whose crates you can click to dig. The band plays on stage with the artists' previews, and the crowd dances. Walk back out through the door, or press Esc.
+- **Inside venues:** song requests (the crowd cheers and the lights flare), a mosh pit in front of the stage at punk and metal shows that shoves you around, and lighters up during slow songs. The app spots slow songs by counting beats in the real audio, and the lighters also appear at gig nights and your busking crowd.
+- **Emotes:** while walking, headbang (1), air guitar (2), dance (3) or crowd-surf (4). You feel it through the camera; in a room your friends see your avatar do it, and inside a venue crowd-surfing carries you towards the stage.
+- **Mini-map:** a round, heading-up map while walking, showing districts, the river, venues, landmarks, label towers and friends.
+- **Your look:** your avatar's hair, outfit, extras and colours start from your top genre (a mohawk for punk, a suit for jazz, a cap for hip hop…) and you can change all of it with a live 3D preview. Friends see it in rooms, and you wear it when you busk.
 - **City sounds.** Synthesised with Web Audio, no recordings: traffic and passing cars, crowd chatter near venues, rain in the rainy moods, wind high above the city, water by the river and crickets in the parks at night. It all gets muffled when you step indoors and ducks under the music.
-- **Walk with friends, live.** Start a room and share the link. Friends who open it build the same city and show up as glowing figures (or as floating orbs when they're flying over). You can see where everyone is, jump to them, wave, and follow them into venues. Browsers connect peer to peer over WebRTC via PeerJS, which is loaded on demand. Only names and positions are sent, and nothing is stored.
+- **Walk with friends, live.** Start a room and share the link. Friends who open it build the same city and show up as glowing figures (or as floating orbs when they're flying over). You can see where everyone is, jump to them, wave, and follow them into venues. **Listen together:** anyone can DJ for the room, and everyone else hears the same song at the same moment (clocks are synced with pings, drift is corrected, and you can stop listening along at any time). Browsers connect peer to peer over WebRTC via PeerJS, which is loaded on demand. Only names and positions are sent, and nothing is stored.
 - **Mood.** Six moods (City night, After hours, Golden hour, Riot, Rainy day, Daydream) change the sky, fog, window light, bloom and weather (rain, lightning, floating sparkles), then play artists from your city that fit. The mood is saved in the share link.
 - **Historical landmarks.** Thirty landmarks based on documented events: the Beatles' rooftop concert (30 Jan 1969), the Abbey Road crossing, the Cavern Club, the Sex Pistols' Jubilee boat trip, Hansa Studios, CBGB, the Troubadour, Knebworth and more. They carry a gold *Historical landmark* badge, with the place and date. Each model is a miniature *inspired by* the place, not a replica. Every genre also gets a fictional monument, labelled *Musical interpretation*.
 - **Landmark soundtracks.** Each landmark has the music tied to it: Abbey Road plays *Abbey Road*, the rooftop concert plays *Let It Be* (“Get Back”, “Don't Let Me Down”…), Battersea plays *Animals*. **Play the soundtrack** finds official previews of those exact songs.
@@ -96,11 +100,14 @@ src/
   music/ambience.ts        Synthesised city sounds
   music/artistLookup.ts    MusicBrainz + iTunes lookups for artists outside the catalogue
   app/                     Feature controllers: walking, gig night, compare, poster, crates, mood, tours, busking,
-                           visualiser, city sounds; together.ts for live rooms
+                           visualiser, city sounds; together.ts (live rooms + listen together),
+                           look.ts (avatar editor), minimap.ts
   scene/                   Rendering
     CityScene.ts           Renderer, camera, controls, bloom, picking, camera moves, build intro, poster capture
     walk.ts                First-person walking with collisions (streets and venue rooms)
-    interior.ts            Walk-in venue interiors, one small scene per venue type
+    interior.ts            Walk-in venue interiors, one small scene per venue type (mosh pits, cheering)
+    avatar.ts              People avatars: genre looks, hair/outfits, emote poses
+    lighters.ts            "Lighters up" flames for crowds
     mood.ts                Mood looks, blending, rain and sparkles
     cityBuilder.ts         CityPlan → meshes; build animation; selection/beam/arc helpers
     buildings.ts           Building archetypes composed from instanced parts
