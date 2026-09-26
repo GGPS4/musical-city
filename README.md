@@ -21,6 +21,9 @@ Type in a few artists or genres (try *The Beatles, David Bowie, The Clash, The S
 - **Guided tours.** A Tours tab offers themed tours (Beatlemania, Punk Year Zero, Kingston Sound…), a chronological grand tour, Label row and your artists' homes. The camera flies stop to stop with captions and a song at each stop, and landmarks get stamped in your passport.
 - **Busk on a corner.** Pick an instrument and whose songs to play, and you busk on the nearest free corner. A crowd gathers while the music plays, and tips land in your case.
 - **Visualiser.** The skyline becomes a spectrum analyser: buildings stretch with the music (bass on the left, treble on the right) and windows flash on the beat. It reads the real preview audio through Web Audio.
+- **Step inside venues.** Walk up to any venue and press Enter (or use *Step inside*) to go in. Each type has its own interior: sticky-floored bars, clubs with light-up floors and a mirror ball, theatres with seats and curtains, warehouses, rooftop stages under the stars, and record stores whose crates you can click to dig. The band plays on stage with the artists' previews, and the crowd dances. Walk back out through the door, or press Esc.
+- **City sounds.** Synthesised with Web Audio, no recordings: traffic and passing cars, crowd chatter near venues, rain in the rainy moods, wind high above the city, water by the river and crickets in the parks at night. It all gets muffled when you step indoors and ducks under the music.
+- **Walk with friends, live.** Start a room and share the link. Friends who open it build the same city and show up as glowing figures (or as floating orbs when they're flying over). You can see where everyone is, jump to them, wave, and follow them into venues. Browsers connect peer to peer over WebRTC via PeerJS, which is loaded on demand. Only names and positions are sent, and nothing is stored.
 - **Mood.** Six moods (City night, After hours, Golden hour, Riot, Rainy day, Daydream) change the sky, fog, window light, bloom and weather (rain, lightning, floating sparkles), then play artists from your city that fit. The mood is saved in the share link.
 - **Historical landmarks.** Thirty landmarks based on documented events: the Beatles' rooftop concert (30 Jan 1969), the Abbey Road crossing, the Cavern Club, the Sex Pistols' Jubilee boat trip, Hansa Studios, CBGB, the Troubadour, Knebworth and more. They carry a gold *Historical landmark* badge, with the place and date. Each model is a miniature *inspired by* the place, not a replica. Every genre also gets a fictional monument, labelled *Musical interpretation*.
 - **Landmark soundtracks.** Each landmark has the music tied to it: Abbey Road plays *Abbey Road*, the rooftop concert plays *Let It Be* (“Get Back”, “Don't Let Me Down”…), Battersea plays *Animals*. **Play the soundtrack** finds official previews of those exact songs.
@@ -89,12 +92,15 @@ src/
     crate.ts               Which records a record store's crate holds
     tours.ts               Venue plaque facts and guided tours
     random.ts, store.ts    Seeded PRNG, tiny observable store
-  music/musicService.ts    Provider abstraction, preview player
+  music/musicService.ts    Provider abstraction, preview player (with an analyser for the visualiser)
+  music/ambience.ts        Synthesised city sounds
   music/artistLookup.ts    MusicBrainz + iTunes lookups for artists outside the catalogue
-  app/                     Feature controllers: walking, gig night, compare, poster, crates, mood, tours, busking, visualiser
+  app/                     Feature controllers: walking, gig night, compare, poster, crates, mood, tours, busking,
+                           visualiser, city sounds; together.ts for live rooms
   scene/                   Rendering
     CityScene.ts           Renderer, camera, controls, bloom, picking, camera moves, build intro, poster capture
-    walk.ts                First-person walking with collisions
+    walk.ts                First-person walking with collisions (streets and venue rooms)
+    interior.ts            Walk-in venue interiors, one small scene per venue type
     mood.ts                Mood looks, blending, rain and sparkles
     cityBuilder.ts         CityPlan → meshes; build animation; selection/beam/arc helpers
     buildings.ts           Building archetypes composed from instanced parts
