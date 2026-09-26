@@ -53,6 +53,10 @@ export interface HudActions {
   performNext(): void;
   endPerform(): void;
   toggleVisualiser(): void;
+  enterVenue(venueId: string): void;
+  toggleAmbience(): void;
+  openTogether(): void;
+  leaveVenue(): void;
   openCrate(venueId: string): void;
   setMood(mood: string): void;
   playMood(): void;
@@ -178,6 +182,14 @@ export class Hud {
         return;
       case 'visualiser':
         return this.actions.toggleVisualiser();
+      case 'ambience':
+        return this.actions.toggleAmbience();
+      case 'together':
+        return this.actions.openTogether();
+      case 'enter-venue':
+        return this.actions.enterVenue(d.id ?? '');
+      case 'leave-venue':
+        return this.actions.leaveVenue();
       case 'open-crate':
         return this.actions.openCrate(d.id ?? '');
       case 'mood':
@@ -505,6 +517,7 @@ export class Hud {
       ${this.plaquesHtml(v.id)}
       <div class="info__actions info__actions--secondary">
         <button type="button" class="btn btn--gold btn--sm" data-action="gig" data-kind="venue" data-id="${v.id}">Gig night</button>
+        <button type="button" class="btn btn--gold btn--sm" data-action="enter-venue" data-id="${v.id}">Step inside</button>
         <button type="button" class="btn btn--ghost btn--sm" data-action="walk" data-kind="venue" data-id="${v.id}">Walk here</button>
       </div>
       ${extra}`;
@@ -590,19 +603,27 @@ export class Hud {
   }
 
   /** Walking HUD: what's playing nearby, the street you're on, plaques and landmarks. */
-  renderWalk(active: boolean, now?: { venue?: string; artist?: string; distance?: number; landmark?: { id: string; name: string } | null; street?: { id: string; name: string } | null; plaque?: string | null }): void {
+  renderWalk(active: boolean, now?: { venue?: string; artist?: string; distance?: number; landmark?: { id: string; name: string } | null; street?: { id: string; name: string } | null; plaque?: string | null; enter?: { id: string; name: string } | null; inside?: { id: string; name: string; store: boolean } | null }): void {
     $('#walk-hud').hidden = !active;
     this.root.classList.toggle('is-walking', active);
     const el = $('#walk-now');
     const street = $('#walk-street');
     street.hidden = !active || !now?.street;
     if (now?.street) street.innerHTML = `<button type="button" data-action="street" data-id="${esc(now.street.id)}"><span class="walk-street__sign">${esc(now.street.name)}</span></button>`;
+    street.hidden = street.hidden || !!now?.inside;
     if (!active || !now || (!now.venue && !now.landmark && !now.plaque)) {
       el.hidden = true;
       return;
     }
     el.hidden = false;
-    el.innerHTML = `${now.venue ? `<div class="walk-now__row"><span class="walk-now__eq" aria-hidden="true"><i></i><i></i><i></i></span><div><strong>${esc(now.artist ?? '')}</strong><small>from ${esc(now.venue)}${now.distance !== undefined ? ` · ${Math.round(now.distance)} m away` : ''}</small></div></div>` : ''}
+    if (now.inside) {
+      el.innerHTML = `<div class="walk-now__inside"><span class="tour__badge">Inside</span><strong>${esc(now.inside.name)}</strong></div>
+        <div class="walk-now__row"><span class="walk-now__eq" aria-hidden="true"><i></i><i></i><i></i></span><div><strong>${esc(now.artist ?? '')}</strong><small>${now.inside.store ? 'On the shop stereo · click a crate to dig' : 'Live on stage'}</small></div></div>
+        ${now.plaque ? `<p class="walk-now__plaque"><span aria-hidden="true">▣</span> ${esc(now.plaque)}</p>` : ''}
+        <button type="button" class="walk-now__lm" data-action="leave-venue">← Back out to the street (Esc)</button>`;
+      return;
+    }
+    el.innerHTML = `${now.enter ? `<button type="button" class="walk-now__enter" data-action="enter-venue" data-id="${esc(now.enter.id)}">Go inside ${esc(now.enter.name)} <kbd>Enter</kbd></button>` : ''}${now.venue ? `<div class="walk-now__row"><span class="walk-now__eq" aria-hidden="true"><i></i><i></i><i></i></span><div><strong>${esc(now.artist ?? '')}</strong><small>from ${esc(now.venue)}${now.distance !== undefined ? ` · ${Math.round(now.distance)} m away` : ''}</small></div></div>` : ''}
       ${now.plaque ? `<p class="walk-now__plaque"><span aria-hidden="true">▣</span> ${esc(now.plaque)}</p>` : ''}
       ${now.landmark ? `<button type="button" class="walk-now__lm" data-action="landmark" data-id="${esc(now.landmark.id)}">★ ${esc(now.landmark.name)} is here · open</button>` : ''}`;
   }
@@ -882,6 +903,14 @@ export class Hud {
         <button type="button" class="btn btn--ghost btn--xs" data-action="perform-next">Next song</button>
         <button type="button" class="btn btn--ghost btn--xs" data-action="perform-end">End set</button>
       </div>`;
+  }
+
+  setTogether(on: boolean): void {
+    $('#together-btn').setAttribute('aria-pressed', String(on));
+  }
+
+  setAmbience(on: boolean): void {
+    $('#amb-btn').setAttribute('aria-pressed', String(on));
   }
 
   setVisualiser(on: boolean): void {
