@@ -55,6 +55,9 @@ export interface HudActions {
   toggleVisualiser(): void;
   enterVenue(venueId: string): void;
   toggleAmbience(): void;
+  emote(kind: string): void;
+  openRequests(venueId: string): void;
+  requestSong(key: string, index: number): void;
   openTogether(): void;
   leaveVenue(): void;
   openCrate(venueId: string): void;
@@ -186,6 +189,15 @@ export class Hud {
         return this.actions.toggleAmbience();
       case 'together':
         return this.actions.openTogether();
+      case 'emote':
+        return this.actions.emote(d.emote ?? 'dance');
+      case 'request':
+        return this.actions.openRequests(d.id ?? '');
+      case 'request-song':
+        return this.actions.requestSong(d.key ?? '', Number(d.index));
+      case 'request-close':
+        $('#request').hidden = true;
+        return;
       case 'enter-venue':
         return this.actions.enterVenue(d.id ?? '');
       case 'leave-venue':
@@ -620,6 +632,7 @@ export class Hud {
       el.innerHTML = `<div class="walk-now__inside"><span class="tour__badge">Inside</span><strong>${esc(now.inside.name)}</strong></div>
         <div class="walk-now__row"><span class="walk-now__eq" aria-hidden="true"><i></i><i></i><i></i></span><div><strong>${esc(now.artist ?? '')}</strong><small>${now.inside.store ? 'On the shop stereo · click a crate to dig' : 'Live on stage'}</small></div></div>
         ${now.plaque ? `<p class="walk-now__plaque"><span aria-hidden="true">▣</span> ${esc(now.plaque)}</p>` : ''}
+        ${now.inside.store ? '' : `<button type="button" class="walk-now__enter" data-action="request" data-id="${esc(now.inside.id)}">Request a song</button>`}
         <button type="button" class="walk-now__lm" data-action="leave-venue">← Back out to the street (Esc)</button>`;
       return;
     }
@@ -905,6 +918,33 @@ export class Hud {
       </div>`;
   }
 
+  /** Who you're listening along with (shown in the player), or null. */
+  listenAlong: string | null = null;
+
+  setListenAlong(name: string | null): void {
+    if (this.listenAlong === name) return;
+    this.listenAlong = name;
+    this.playerKey = '';
+    this.renderPlayer(this.playerState);
+  }
+
+  /** The song request list inside a venue. */
+  renderRequests(venueName: string, key: string, value: { tracks: Track[] } | 'loading'): void {
+    const el = $('#request');
+    el.hidden = false;
+    const rows =
+      value === 'loading'
+        ? '<p class="tracks__loading">Asking the band what they know…</p>'
+        : value.tracks.length
+          ? `<ul class="track-list">${value.tracks
+              .map((t, i) => `<li><button type="button" class="track" data-action="request-song" data-key="${esc(key)}" data-index="${i}">
+                ${t.artworkUrl ? `<img src="${esc(t.artworkUrl)}" alt="" loading="lazy">` : '<span class="track__art"></span>'}
+                <span class="track__main"><strong>${esc(t.title)}</strong><small>${esc(t.artist)}</small></span><span class="track__icon">${ICONS.play}</span></button></li>`)
+              .join('')}</ul>`
+          : '<p class="tracks__source">Music data unavailable right now.</p>';
+    el.innerHTML = `<div class="tour__head"><span class="tour__badge">Request a song · ${esc(venueName)}</span><button type="button" class="icon-btn" data-action="request-close" aria-label="Close">${ICONS.close}</button></div>${rows}`;
+  }
+
   setTogether(on: boolean): void {
     $('#together-btn').setAttribute('aria-pressed', String(on));
   }
@@ -982,7 +1022,7 @@ export class Hud {
       this.player.hidden = false;
       this.player.innerHTML = `
         ${s.track.artworkUrl ? `<img src="${esc(s.track.artworkUrl)}" alt="">` : '<span class="track__art"></span>'}
-        <div class="player__main"><strong>${esc(s.track.title)}</strong><small>${esc(s.track.artist)}${s.status === 'loading' ? ' · loading…' : ''}</small>
+        <div class="player__main"><strong>${esc(s.track.title)}</strong><small>${esc(s.track.artist)}${s.status === 'loading' ? ' · loading…' : ''}${this.listenAlong ? ` · <span class="player__along">listening along with ${esc(this.listenAlong)}</span>` : ''}</small>
           <span class="player__bar"><i style="width:${(s.progress * 100).toFixed(1)}%"></i></span></div>
         <button type="button" class="icon-btn" data-action="player-toggle" aria-label="${s.status === 'playing' ? 'Pause' : 'Play'}">${s.status === 'playing' ? ICONS.pause : ICONS.play}</button>
         ${this.hasNext() ? `<button type="button" class="icon-btn" data-action="player-next" aria-label="Next song">${ICONS.next}</button>` : ''}
