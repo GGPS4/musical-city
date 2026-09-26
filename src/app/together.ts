@@ -120,7 +120,8 @@ export function createTogetherController(
       const expected = m.pos + (m.playing ? (hostNow() - m.at) / 1000 : 0);
       if (expected > 29.5 && m.playing) return;
       if (p.current?.previewUrl !== m.track.previewUrl) {
-        p.playAt(m.track as Track, expected, !m.playing);
+        // Wait for the DJ to actually press play before loading their song.
+        if (m.playing) p.playAt(m.track as Track, expected);
         return;
       }
       if (m.playing === p.paused) p.toggle();
@@ -164,6 +165,7 @@ export function createTogetherController(
 
   function render() {
     ctx.hud.setTogether(!!room);
+    document.getElementById('hud')?.classList.toggle('is-together-open', open);
     if (!open) {
       panel.hidden = true;
       return;
