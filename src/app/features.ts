@@ -1,7 +1,8 @@
 import { ARTIST_BY_ID } from '../data/artists.js';
 import { crateFor, type CrateRecord } from '../core/crate.js';
 import { plaqueFacts, type Tour, type TourStop } from '../core/tours.js';
-import { openCorners } from '../core/cityGenerator.js';
+import { distToPolyline, openCorners } from '../core/cityGenerator.js';
+import { Ambience, type AmbienceMix } from '../music/ambience.js';
 import { GENRES } from '../data/genres.js';
 import { soundtrackArtist, splitInput } from '../core/resolve.js';
 import { store } from '../core/store.js';
@@ -130,6 +131,28 @@ export function createWalkController(ctx: AppContext) {
   /** What is currently playing while walking: a venue or a busker. */
   let currentSource: string | null = null;
   let token = 0;
+  let lastNear: Nearby | null = null;
+  let inside: string | null = null;
+
+  function renderInside() {
+    const plan = store.get().plan;
+    const v = plan?.venues.find((x) => x.id === inside);
+    if (!plan || !v) return;
+    const track = ctx.player.current;
+    const facts = plaqueFacts(plan, v.id);
+    ctx.hud.renderWalk(true, {
+      inside: { id: v.id, name: v.name, store: v.type === 'record-store' },
+      venue: v.name,
+      artist: track ? `${track.title} · ${track.artist}` : v.artistIds.map((id) => artistIn(plan, id)?.name).filter(Boolean).slice(0, 3).join(' · '),
+      plaque: facts.length ? facts[Math.floor(performance.now() / 6000) % facts.length] : null,
+    });
+  }
+  ctx.player.subscribe(() => {
+    if (inside) renderInside();
+  });
+  setInterval(() => {
+    if (inside) renderInside();
+  }, 6000);
 
   /** Plays songs from every artist at the venue (or the busker's artist), one after another. */
   async function playArtists(key: string, artistIds: string[]) {
@@ -166,8 +189,10 @@ export function createWalkController(ctx: AppContext) {
       const facts = plaqueFacts(plan, n.venue.id);
       if (facts.length) plaque = facts[Math.floor(performance.now() / 6000) % facts.length];
     }
+    lastNear = n;
     ctx.hud.renderWalk(true, {
       street: n.street ? { id: n.street.id, name: n.street.name } : null,
+      enter: n.venue && n.venueDistance < 11 ? { id: n.venue.id, name: n.venue.name } : null,
       plaque,
       venue: sourceName,
       artist: track ? `${track.title} · ${track.artist}` : plan ? ids.map((id) => artistIn(plan, id)?.name).filter(Boolean).slice(0, 3).join(' · ') : undefined,
@@ -201,8 +226,15 @@ export function createWalkController(ctx: AppContext) {
   stick.addEventListener('pointercancel', release);
 
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && ctx.scene.walking) api.exit();
+    if (!ctx.scene.walking || e.target instanceof HTMLInputElement) return;
+    if (e.key === 'Escape') {
+      if (inside) api.leaveVenue();
+      else api.exit();
+    } else if ((e.key === 'Enter' || e.key === 'f' || e.key === 'F') && !inside && lastNear?.venue && lastNear.venueDistance < 11) {
+      api.enterVenue(lastNear.venue.id);
+    }
   });
+  ctx.scene.walk.onDoor = () => api.leaveVenue();
 
   const api = {
     onNearby,
@@ -223,8 +255,51 @@ export function createWalkController(ctx: AppContext) {
       ctx.hud.renderWalk(true);
       toast(window.matchMedia('(pointer: coarse)').matches ? 'Use the stick to walk and drag to look around. Music plays as you pass venues and buskers.' : 'WASD or arrows to walk, drag to look, Shift to run. Music plays as you pass venues and buskers.');
     },
+    /** Starts walking (or jumps, if already walking) near a point. */
+    enterAt(p: Vec2) {
+      if (inside) api.leaveVenue();
+      if (ctx.scene.walking) {
+        ctx.scene.walk.teleport({ x: p.x + 3, z: p.z + 3 }, p);
+        return;
+      }
+      ctx.select(null);
+      store.set({ listOpen: false });
+      ctx.hud.setTab(store.get().tab, false);
+      currentSource = null;
+      ctx.player.stop();
+      ctx.scene.enterWalk({ x: p.x + 3, z: p.z + 3 }, p);
+      ctx.hud.renderWalk(true);
+    },
+    /** Walk through a venue's door. Starts walking first if needed. */
+    enterVenue(id: string) {
+      const plan = store.get().plan;
+      const v = plan?.venues.find((x) => x.id === id);
+      if (!plan || !v) return;
+      if (!ctx.scene.walking) api.enter('venue', id);
+      const names = v.artistIds.map((a) => artistIn(plan, a)?.name).filter((n): n is string => !!n);
+      ctx.scene.enterInterior(v, names);
+      inside = id;
+      currentSource = `venue:${id}`;
+      ctx.player.setVolume(0.95);
+      void playArtists(currentSource, v.artistIds);
+      renderInside();
+    },
+    leaveVenue() {
+      if (!inside) return;
+      inside = null;
+      ctx.scene.exitInterior();
+      // Let the street decide what plays next.
+      currentSource = null;
+      token++;
+      ctx.player.stop();
+      ctx.hud.renderWalk(true);
+    },
+    get insideVenue() {
+      return inside;
+    },
     exit() {
       if (!ctx.scene.walking) return;
+      inside = null;
       token++;
       currentSource = null;
       ctx.player.stop();
@@ -895,5 +970,81 @@ export function createVisualiserController(ctx: AppContext, startMusic: () => vo
       } else toast('Visualiser on. The skyline follows the music, bass on the left, treble on the right.');
     },
   };
+  return api;
+}
+
+/* ------------------------------------------------------------------ */
+/* City sounds                                                         */
+/* ------------------------------------------------------------------ */
+
+export function createAmbienceController(ctx: AppContext) {
+  const KEY = 'musical-city:ambience';
+  const amb = new Ambience();
+  let on = false;
+  try {
+    on = localStorage.getItem(KEY) === '1';
+  } catch {
+    /* storage unavailable */
+  }
+
+  function mix(): AmbienceMix | null {
+    const plan = store.get().plan;
+    if (!plan) return null;
+    const l = ctx.scene.listener();
+    const near = Math.max(0, Math.min(1, 1 - (l.height - 2) / 160));
+    let venueD = Infinity;
+    for (const v of plan.venues) venueD = Math.min(venueD, Math.hypot(v.position.x - l.x, v.position.z - l.z));
+    const riverD = distToPolyline({ x: l.x, z: l.z }, plan.river.points).d;
+    let parkD = Infinity;
+    for (const b of plan.blocks) if (b.use === 'park') parkD = Math.min(parkD, Math.hypot(b.center.x - l.x, b.center.z - l.z));
+    const clamp = (v: number) => Math.max(0, Math.min(1, v));
+    return {
+      traffic: 0.12 + 0.6 * near,
+      crowd: l.inside ? 1 : 0.04 + clamp(1 - venueD / 32) * 0.7 * near,
+      rain: l.rain,
+      wind: clamp((l.height - 30) / 220) * 0.8 + (l.walking ? 0.05 : 0),
+      water: clamp(1 - riverD / 28) * near * 0.8,
+      crickets: l.night ? clamp(1 - parkD / 26) * near : 0,
+      inside: l.inside ? 1 : 0,
+      duck: ctx.player.playing,
+    };
+  }
+
+  window.setInterval(() => {
+    if (!on || !amb.running) return;
+    const m = mix();
+    if (m) amb.set(m);
+  }, 250);
+
+  const api = {
+    get on() {
+      return on;
+    },
+    toggle() {
+      on = !on;
+      try {
+        localStorage.setItem(KEY, on ? '1' : '0');
+      } catch {
+        /* storage unavailable */
+      }
+      if (on) {
+        if (!amb.start()) {
+          toast('This browser can’t play city sounds.', 'warn');
+          on = false;
+        } else toast('City sounds on: traffic, crowds near venues, rain, the river and crickets in the parks.');
+      } else amb.stop();
+      ctx.hud.setAmbience(on);
+    },
+  };
+
+  // Browsers only allow audio after a click, so resume on the first one.
+  if (on) {
+    ctx.hud.setAmbience(true);
+    const resume = () => {
+      window.removeEventListener('pointerdown', resume);
+      if (on) amb.start();
+    };
+    window.addEventListener('pointerdown', resume);
+  }
   return api;
 }
