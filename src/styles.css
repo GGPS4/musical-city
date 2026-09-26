@@ -3210,3 +3210,132 @@ button.stamp {
     max-height: 4.5em;
   }
 }
+
+/* ---------------- venue interiors ---------------- */
+
+.walk-now__enter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid rgba(255, 210, 122, 0.6);
+  border-radius: 8px;
+  background: rgba(255, 210, 122, 0.14);
+  color: #ffe6b3;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.walk-now__enter kbd,
+.walk-now kbd {
+  padding: 1px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.walk-now__inside {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.walk-now__inside strong {
+  font-family: var(--display);
+  font-size: 16px;
+}
+
+/* ---------------- walk with friends ---------------- */
+
+.together {
+  position: absolute;
+  left: 16px;
+  bottom: calc(86px + var(--safe-b));
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(340px, calc(100% - 32px));
+  padding: 14px 16px;
+  background: var(--panel-solid);
+}
+
+.together input {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: rgba(255, 255, 255, 0.04);
+  font: inherit;
+  color: var(--text);
+}
+
+.tg-link {
+  display: flex;
+  gap: 6px;
+}
+
+.tg-link input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.tg-people {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tg-people li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tg-people li > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+
+.tg-people strong {
+  display: block;
+  font-size: 13px;
+}
+
+.tg-people small {
+  display: block;
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tg-dot {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border-radius: 50%;
+  box-shadow: 0 0 10px currentColor;
+}
+
+.tg-empty {
+  font-size: 12.5px;
+  color: var(--faint);
+}
+
+@media (max-width: 760px) {
+  .together {
+    left: 12px;
+    right: 12px;
+    width: auto;
+    bottom: calc(118px + var(--safe-b));
+  }
+}

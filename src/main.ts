@@ -19,8 +19,9 @@ import { $, toast } from './ui/dom.js';
 import { Hud, type HudActions } from './ui/hud.js';
 import { DEMO_INPUT, Landing } from './ui/landing.js';
 import type { AppContext } from './app/context.js';
-import { createCompareController, createCrateController, createGigController, createMoodController, createPerformController, createPosterController, createTourController, createVisualiserController, createWalkController, stampLandmark } from './app/features.js';
+import { createCompareController, createCrateController, createGigController, createMoodController, createPerformController, createPosterController, createAmbienceController, createTourController, createVisualiserController, createWalkController, stampLandmark } from './app/features.js';
 import { toursFor } from './core/tours.js';
+import { createTogetherController } from './app/together.js';
 import type { MoodId } from './scene/mood.js';
 
 function webglAvailable(): boolean {
@@ -205,7 +206,8 @@ function boot() {
       return;
     }
     const fly = !scene.walking;
-    if (hit.kind === 'building') select({ kind: 'building', id: Number(hit.id) }, { fly: false });
+    if (hit.kind === 'crate') crate.open(String(hit.id));
+    else if (hit.kind === 'building') select({ kind: 'building', id: Number(hit.id) }, { fly: false });
     else select({ kind: hit.kind, id: String(hit.id) }, { fly });
   };
 
@@ -311,6 +313,7 @@ function boot() {
       scene.overview();
     },
     newCity() {
+      if (together.active) together.leave(false);
       walk.exit();
       gig.end();
       tours.end();
@@ -455,6 +458,16 @@ function boot() {
     performNext: () => perform.next(),
     endPerform: () => perform.end(),
     toggleVisualiser: () => viz.toggle(),
+    enterVenue(id) {
+      gig.end();
+      tours.end();
+      perform.end();
+      select(null);
+      walk.enterVenue(id);
+    },
+    leaveVenue: () => walk.leaveVenue(),
+    toggleAmbience: () => ambience.toggle(),
+    openTogether: () => together.open(),
   };
 
   const hud = new Hud($('#hud'), actions);
@@ -532,6 +545,31 @@ function boot() {
   const tours = createTourController(ctx);
   const perform = createPerformController(ctx);
   const viz = createVisualiserController(ctx, () => void mood.play());
+  const ambience = createAmbienceController(ctx);
+  /** A short "where are you" line for the people in your room. */
+  const whereAmI = () => {
+    const plan = store.get().plan;
+    if (!plan) return '';
+    const me = scene.selfState();
+    if (me.inside) return `Inside ${plan.venues.find((v) => v.id === me.inside)?.name ?? 'a venue'}`;
+    if (me.walking) {
+      const st = plan.streets
+        .map((s) => ({ s, d: s.axis === 'x' ? Math.abs(me.z - s.c) : Math.abs(me.x - s.c) }))
+        .sort((a, b) => a.d - b.d)[0];
+      return st && st.d < plan.pitch / 2 ? `Walking on ${st.s.name}` : 'Walking around';
+    }
+    const d = plan.districts.slice().sort((a, b) => Math.hypot(a.center.x - me.x, a.center.z - me.z) - Math.hypot(b.center.x - me.x, b.center.z - me.z))[0];
+    return d ? `Flying over the ${d.name}` : 'Flying over the city';
+  };
+  const together = createTogetherController(ctx, shareUrl, whereAmI, {
+    walkTo: (p) => {
+      gig.end();
+      tours.end();
+      perform.end();
+      walk.enterAt(p);
+    },
+    goToVenue: (id) => actions.enterVenue(id),
+  });
 
   /** Swaps billboard sleeves for real covers, one request at a time to stay polite to the API. */
   const loadBillboardArt = async (plan: NonNullable<ReturnType<typeof store.get>['plan']>) => {
@@ -554,6 +592,7 @@ function boot() {
     setPhase('city');
     const plan = store.get().plan;
     if (plan) void loadBillboardArt(plan);
+    together.offerInvite();
     const compare = store.get().compare;
     const messages = [...notices];
     if (plan?.unknownInputs.length) messages.push(`We couldn’t find ${plan.unknownInputs.join(', ')}, so they appear as musical interpretations.`);
