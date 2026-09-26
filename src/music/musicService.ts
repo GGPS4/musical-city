@@ -408,11 +408,76 @@ export class PreviewPlayer {
       this.update('paused', 1);
       if (!this.next()) this.queue = [];
     });
-    this.audio.addEventListener('error', () => this.stop());
+    this.audio.addEventListener('error', () => this.remote(() => this.stop()));
+  }
+
+  /**
+   * While listening along with a room's DJ, the player follows the DJ and
+   * ignores other requests (`onBlocked` lets the app say why).
+   */
+  locked = false;
+  onBlocked: (() => void) | null = null;
+  private remoteCall = false;
+
+  private blocked(): boolean {
+    if (this.locked && !this.remoteCall) {
+      this.onBlocked?.();
+      return true;
+    }
+    return false;
+  }
+
+  /** Runs player calls on behalf of the DJ, bypassing the lock. */
+  remote(fn: () => void): void {
+    this.remoteCall = true;
+    try {
+      fn();
+    } finally {
+      this.remoteCall = false;
+    }
+  }
+
+  /** Plays a track from a given point (seconds), optionally paused. */
+  playAt(track: Track, seconds: number, paused = false): void {
+    if (this.blocked() || !track.previewUrl) return;
+    this.queue = [];
+    this.audio.src = track.previewUrl;
+    this.state = { status: 'loading', track, progress: 0 };
+    this.emit();
+    const seek = () => {
+      try {
+        this.audio.currentTime = Math.max(0, Math.min(seconds, (this.audio.duration || 30) - 0.3));
+      } catch {
+        /* not seekable yet */
+      }
+    };
+    this.audio.addEventListener('loadedmetadata', seek, { once: true });
+    if (paused) {
+      this.audio.load();
+      this.state = { status: 'paused', track, progress: 0 };
+      this.emit();
+    } else this.audio.play().catch(() => this.remote(() => this.stop()));
+  }
+
+  get position(): number {
+    return this.audio.currentTime || 0;
+  }
+
+  seek(seconds: number): void {
+    try {
+      this.audio.currentTime = Math.max(0, seconds);
+    } catch {
+      /* not seekable */
+    }
+  }
+
+  get paused(): boolean {
+    return this.audio.paused;
   }
 
   /** Plays a list in order, starting at `start`, skipping tracks without previews. */
   playQueue(tracks: Track[], start = 0): void {
+    if (this.blocked()) return;
     this.queue = tracks.filter((t) => t.previewUrl);
     const first = tracks[start]?.previewUrl ? tracks[start] : this.queue[0];
     if (first) this.load(first);
@@ -420,6 +485,7 @@ export class PreviewPlayer {
 
   /** Skips to the next track in the queue. Returns false at the end. */
   next(): boolean {
+    if (this.locked && !this.remoteCall) return false;
     const i = this.queue.findIndex((t) => this.state.status !== 'idle' && t.previewUrl === this.state.track.previewUrl);
     const nextTrack = this.queue[i + 1];
     if (!nextTrack) return false;
@@ -434,7 +500,7 @@ export class PreviewPlayer {
 
   /** Plays one track. If it belongs to the current queue, the queue carries on after it. */
   play(track: Track): void {
-    if (!track.previewUrl) return;
+    if (!track.previewUrl || this.blocked()) return;
     if (!this.queue.some((t) => t.previewUrl === track.previewUrl)) this.queue = [];
     if (this.state.status !== 'idle' && this.state.track.previewUrl === track.previewUrl) {
       this.toggle();
@@ -448,7 +514,7 @@ export class PreviewPlayer {
     this.audio.src = track.previewUrl;
     this.state = { status: 'loading', track, progress: 0 };
     this.emit();
-    this.audio.play().catch(() => this.stop());
+    this.audio.play().catch(() => this.remote(() => this.stop()));
   }
 
   /** 0–1, used to fade music in and out while walking. */
@@ -461,12 +527,13 @@ export class PreviewPlayer {
   }
 
   toggle(): void {
-    if (this.state.status === 'idle') return;
-    if (this.audio.paused) void this.audio.play().catch(() => this.stop());
+    if (this.state.status === 'idle' || (this.locked && !this.remoteCall)) return;
+    if (this.audio.paused) void this.audio.play().catch(() => this.remote(() => this.stop()));
     else this.audio.pause();
   }
 
   stop(): void {
+    if (this.locked && !this.remoteCall) return;
     this.queue = [];
     this.audio.pause();
     this.audio.removeAttribute('src');

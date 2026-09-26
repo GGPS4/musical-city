@@ -76,6 +76,50 @@ export class Ambience {
     }, 1200);
   }
 
+  /** A burst of cheering and whistles (works even when city sounds are off). */
+  cheer(strength = 1): void {
+    try {
+      if (!this.ctx) this.build();
+      const ctx = this.ctx!;
+      void ctx.resume();
+      const t = ctx.currentTime;
+      const out = ctx.createGain();
+      out.gain.setValueAtTime(0, t);
+      out.gain.linearRampToValueAtTime(0.5 * strength, t + 0.25);
+      out.gain.setTargetAtTime(0, t + 1.2, 0.7);
+      out.connect(ctx.destination);
+      for (const f of [700, 1400, 2600]) {
+        const src = ctx.createBufferSource();
+        src.buffer = this.cheerBuffer ??= noiseBuffer(ctx, 'pink', 4);
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.value = f;
+        bp.Q.value = 0.8;
+        src.connect(bp).connect(out);
+        src.start(t, Math.random());
+        src.stop(t + 4);
+      }
+      // A few whistles.
+      for (let i = 0; i < 3; i++) {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        const s0 = t + 0.2 + Math.random() * 1.2;
+        o.frequency.setValueAtTime(1800 + Math.random() * 600, s0);
+        o.frequency.linearRampToValueAtTime(2800 + Math.random() * 500, s0 + 0.35);
+        g.gain.setValueAtTime(0, s0);
+        g.gain.linearRampToValueAtTime(0.05 * strength, s0 + 0.05);
+        g.gain.linearRampToValueAtTime(0, s0 + 0.4);
+        o.connect(g).connect(ctx.destination);
+        o.start(s0);
+        o.stop(s0 + 0.45);
+      }
+    } catch {
+      /* no audio */
+    }
+  }
+
+  private cheerBuffer: AudioBuffer | null = null;
+
   set(mix: AmbienceMix): void {
     this.mix = mix;
     const ctx = this.ctx;
