@@ -3251,10 +3251,16 @@ button.stamp {
 
 /* ---------------- walk with friends ---------------- */
 
+.hud.is-together-open .dna {
+  display: none;
+}
+
 .together {
   position: absolute;
-  left: 16px;
-  bottom: calc(86px + var(--safe-b));
+  right: 16px;
+  top: 16px;
+  max-height: calc(100% - 170px);
+  overflow-y: auto;
   z-index: 7;
   display: flex;
   flex-direction: column;
@@ -3333,10 +3339,12 @@ button.stamp {
 
 @media (max-width: 760px) {
   .together {
+    top: auto;
     left: 12px;
     right: 12px;
     width: auto;
     bottom: calc(118px + var(--safe-b));
+    max-height: 55vh;
   }
 }
 
@@ -3552,4 +3560,8 @@ button.stamp {
     width: auto;
     bottom: calc(150px + var(--safe-b));
   }
+}
+
+.hud.is-together-open .minimap {
+  display: none;
 }
