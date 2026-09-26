@@ -3,6 +3,7 @@ import { crateFor, type CrateRecord } from '../core/crate.js';
 import { plaqueFacts, type Tour, type TourStop } from '../core/tours.js';
 import { distToPolyline, openCorners } from '../core/cityGenerator.js';
 import { Ambience, type AmbienceMix } from '../music/ambience.js';
+import type { Look } from '../scene/avatar.js';
 import { GENRES } from '../data/genres.js';
 import { soundtrackArtist, splitInput } from '../core/resolve.js';
 import { store } from '../core/store.js';
@@ -157,7 +158,7 @@ export function createWalkController(ctx: AppContext) {
   /** Plays songs from every artist at the venue (or the busker's artist), one after another. */
   async function playArtists(key: string, artistIds: string[]) {
     const plan = store.get().plan;
-    if (!plan) return;
+    if (!plan || ctx.player.locked) return;
     const my = ++token;
     const artists = artistIds.map((id) => artistIn(plan, id)).filter((a): a is Artist => !!a && !a.custom);
     const res = await ctx.music.tracksForArtists(artists, artists.length > 1 ? 1 : 3);
@@ -177,9 +178,10 @@ export function createWalkController(ctx: AppContext) {
     } else if (!key && currentSource) {
       currentSource = null;
       token++;
-      ctx.player.stop();
+      if (!ctx.player.locked) ctx.player.stop();
     }
-    if (useBusker) ctx.player.setVolume(Math.max(0.08, 1 - n.buskerDistance / 14));
+    if (ctx.player.locked) ctx.player.setVolume(0.9);
+    else if (useBusker) ctx.player.setVolume(Math.max(0.08, 1 - n.buskerDistance / 14));
     else if (n.venue) ctx.player.setVolume(Math.max(0.08, 1 - n.venueDistance / 24));
     const track = ctx.player.current;
     const sourceName = useBusker ? `${n.busker!.name}, busking` : n.venue?.name;
@@ -819,7 +821,7 @@ export function createTourController(ctx: AppContext) {
 /* Your own street performance                                         */
 /* ------------------------------------------------------------------ */
 
-export function createPerformController(ctx: AppContext) {
+export function createPerformController(ctx: AppContext, getLook?: () => Look) {
   let live: { corner: string; instrument: string; started: number; crowd: number; tips: number; queue: Track[]; peak: number } | null = null;
   let loop = 0;
 
@@ -852,7 +854,7 @@ export function createPerformController(ctx: AppContext) {
     if (playing && Math.random() < live.crowd * 0.012) live.tips += [0.25, 0.25, 0.5, 1, 1, 2, 5][Math.floor(Math.random() * 7)];
     ctx.scene.currentCity?.setAudience(live.crowd);
     // Keep the set going when the queue runs out.
-    if (!ctx.player.current && live.queue.length && t > 4) ctx.player.playQueue(live.queue);
+    if (!ctx.player.current && live.queue.length && t > 4 && !ctx.player.locked) ctx.player.playQueue(live.queue);
     render();
   }
 
@@ -883,7 +885,7 @@ export function createPerformController(ctx: AppContext) {
       const artists = chosen ? [chosen] : userArtists(plan).length ? userArtists(plan) : plan.artists.filter((a) => !a.custom).slice(0, 6);
       const genre = plan.districts.slice().sort((a, b) => Math.hypot(a.center.x - corner.p.x, a.center.z - corner.p.z) - Math.hypot(b.center.x - corner.p.x, b.center.z - corner.p.z))[0]?.genre ?? plan.districts[0].genre;
       const instrument = (choice.instrument || 'guitar') as BuskerPlan['instrument'];
-      city.startPerformance({ id: 'you', name: 'You', position: corner.p, rotation: corner.rot, artistId: artists[0]?.id ?? '', genre, instrument });
+      city.startPerformance({ id: 'you', name: 'You', position: corner.p, rotation: corner.rot, artistId: artists[0]?.id ?? '', genre, instrument }, getLook?.());
       ctx.scene.focus(corner.p, 24, 1.5, 1.6);
       live = { corner: cornerName(plan, corner.p), instrument: INSTRUMENT_NAMES[instrument] ?? instrument, started: performance.now(), crowd: 0, tips: 0, queue: [], peak: 0 };
       render();
@@ -1019,6 +1021,9 @@ export function createAmbienceController(ctx: AppContext) {
   const api = {
     get on() {
       return on;
+    },
+    cheer(strength = 1) {
+      amb.cheer(strength);
     },
     toggle() {
       on = !on;
