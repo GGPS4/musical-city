@@ -14,6 +14,7 @@ import { MOOD_BY_ID, MoodState, Rain, Sparkles, type MoodId } from './mood.js';
 import { glowTexture, signTexture } from './textures.js';
 import { cityUniforms } from './materials.js';
 import { buildInterior, type Interior } from './interior.js';
+import { buildAvatar, lookForGenre, poseAvatar, type AvatarParts, type Emote, type Look } from './avatar.js';
 import type { VenuePlan } from '../types.js';
 
 export interface FriendState {
@@ -26,7 +27,14 @@ export interface FriendState {
   walking: boolean;
   inside: string | null;
   wave?: number;
+  look?: Look;
+  emote?: Emote | null;
+  /** Increases every time they start an emote. */
+  emoteSeq?: number;
 }
+
+/** How long an emote plays. */
+export const EMOTE_SECONDS = 5;
 
 export interface SceneEvents {
   onPick: (hit: PickHit | null) => void;
@@ -34,6 +42,8 @@ export interface SceneEvents {
   onBuildProgress?: (t: number) => void;
   onBuildComplete?: () => void;
   onNearby?: (n: Nearby) => void;
+  /** You stepped into (or out of) a mosh pit. */
+  onPit?: (inPit: boolean) => void;
 }
 
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -514,7 +524,7 @@ export class CityScene {
 
   /* ---------------- friends walking with you ---------------- */
 
-  private friends = new Map<string, { group: THREE.Group; person: THREE.Group; orb: THREE.Mesh; target: FriendState; jump: number }>();
+  private friends = new Map<string, { group: THREE.Group; person: THREE.Group; avatar: AvatarParts; lookKey: string; orb: THREE.Mesh; target: FriendState; jump: number; emoteStart: number; emoteSeq: number }>();
 
   /** Shows (and smoothly moves) the other people in your room. */
   setFriends(list: FriendState[]): void {
@@ -522,16 +532,16 @@ export class CityScene {
     for (const f of list) {
       seen.add(f.id);
       let a = this.friends.get(f.id);
+      const look = f.look ?? lookForGenre(undefined, f.id.length);
+      const lookKey = JSON.stringify(look);
       if (!a) {
         const group = new THREE.Group();
         const person = new THREE.Group();
-        const bodyMat = new THREE.MeshStandardMaterial({ color: f.color, roughness: 0.6, emissive: f.color, emissiveIntensity: 0.25 });
-        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, 1.15, 12).translate(0, 0.58, 0), bodyMat);
-        const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 12), new THREE.MeshStandardMaterial({ color: '#e2b99a', roughness: 0.7 }));
-        head.position.y = 1.45;
-        const ring = new THREE.Mesh(new THREE.RingGeometry(0.7, 0.95, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(f.color).multiplyScalar(2), toneMapped: false, transparent: true, opacity: 0.8 }));
+        const ring = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.75, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(f.color).multiplyScalar(2), toneMapped: false, transparent: true, opacity: 0.8 }));
         ring.position.y = 0.05;
-        person.add(body, head, ring);
+        person.add(ring);
+        const avatar = buildAvatar(look);
+        person.add(avatar.root);
         const orb = new THREE.Mesh(new THREE.SphereGeometry(1.1, 20, 14), new THREE.MeshBasicMaterial({ color: new THREE.Color(f.color).multiplyScalar(2.2), toneMapped: false }));
         const { tex, aspect } = signTexture(f.name, f.color, 'marquee');
         const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
@@ -541,10 +551,20 @@ export class CityScene {
         group.add(person, orb, tag);
         group.userData.tag = tag;
         group.position.set(f.x, f.walking ? 0 : 14, f.z);
-        a = { group, person, orb, target: f, jump: 0 };
+        a = { group, person, avatar, lookKey, orb, target: f, jump: 0, emoteStart: -1, emoteSeq: f.emoteSeq ?? 0 };
         this.friends.set(f.id, a);
+      } else if (a.lookKey !== lookKey) {
+        // They changed their look: rebuild the avatar.
+        a.avatar.root.removeFromParent();
+        a.avatar = buildAvatar(look);
+        a.person.add(a.avatar.root);
+        a.lookKey = lookKey;
       }
       if (f.wave && f.wave !== a.target.wave) a.jump = 1;
+      if ((f.emoteSeq ?? 0) !== a.emoteSeq) {
+        a.emoteSeq = f.emoteSeq ?? 0;
+        a.emoteStart = this.time;
+      }
       a.target = f;
     }
     for (const [id, a] of this.friends) {
@@ -577,11 +597,15 @@ export class CityScene {
       a.person.visible = f.walking;
       a.orb.visible = !f.walking;
       a.person.rotation.y = f.yaw;
+      const et = this.time - a.emoteStart;
+      const emote = f.emote && a.emoteStart >= 0 && et < EMOTE_SECONDS ? f.emote : null;
+      poseAvatar(a.avatar, emote, et, this.time + a.group.id);
+      if (a.jump > 0) a.avatar.armR.rotation.set(-2.8 + Math.sin(this.time * 14) * 0.3, 0, 0.2);
       const tag = a.group.userData.tag as THREE.Sprite;
-      tag.position.y = f.walking ? 2.2 : 2.4;
+      tag.position.y = f.walking ? (emote === 'surf' ? 3.1 : 2.25) : 2.4;
       const dist = this.camera.position.distanceTo(a.group.position);
-      const s = Math.max(1, dist / 14);
-      tag.scale.set((tag.scale.x / tag.scale.y) * 0.5 * s, 0.5 * s, 1);
+      const s = Math.max(1, dist / 12);
+      tag.scale.set((tag.scale.x / tag.scale.y) * 0.3 * s, 0.3 * s, 1);
     }
   }
 
@@ -592,6 +616,40 @@ export class CityScene {
     const dir = new THREE.Vector3();
     this.camera.getWorldDirection(dir);
     return { x: p.x, z: p.z, yaw: Math.atan2(dir.x, dir.z), walking, inside: this.interior?.venueId ?? null };
+  }
+
+  private pitTimer = 0;
+  private inPit = false;
+
+  /** The pit shoves you about while you're in it. */
+  private updatePit(dt: number) {
+    const pit = this.interior?.pit;
+    const d = pit ? Math.hypot(this.camera.position.x - pit.x, this.camera.position.z - pit.z) : Infinity;
+    const inside = !!pit && d < pit.r + 0.4 && this.walk.emoting !== 'surf';
+    if (inside !== this.inPit) {
+      this.inPit = inside;
+      this.events.onPit?.(inside);
+    }
+    if (!inside || !pit) return;
+    this.pitTimer -= dt;
+    if (this.pitTimer <= 0) {
+      this.pitTimer = 0.3 + Math.random() * 0.55;
+      const a = Math.random() * Math.PI * 2;
+      const f = 0.3 + Math.random() * 0.5;
+      this.walk.nudge(Math.cos(a) * f, Math.sin(a) * f, 1);
+    }
+  }
+
+  /** The venue crowd goes wild (a song request, an emote). */
+  cheer(amount = 1): void {
+    if (this.interior) this.interior.hype.value = Math.min(1, Math.max(this.interior.hype.value, amount));
+  }
+
+  /** Your own emote, seen from behind your eyes. */
+  emote(kind: Emote): void {
+    if (!this.walk.active) return;
+    this.walk.emote(kind);
+    if (kind === 'headbang' || kind === 'surf') this.cheer(0.5);
   }
 
   /* ---------------- venue interiors ---------------- */
@@ -703,6 +761,7 @@ export class CityScene {
 
     if (this.walk.active) {
       this.walk.update(dt, this.time);
+      this.updatePit(dt);
     } else if (this.intro && city) {
       const t = this.time - this.intro.start;
       const k = Math.min(1, t / TIMELINE.done);

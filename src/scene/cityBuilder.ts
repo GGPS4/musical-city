@@ -7,7 +7,9 @@ import { Instancer } from './instancer.js';
 import { MATS, cityUniforms, glow, std } from './materials.js';
 import { buildBillboard, buildBusker, buildHome, buildLabelTower, buildLandmark, buildVenue, type BillboardModel, type Model, type Tick } from './models.js';
 import { ARTIST_BY_ID } from '../data/artists.js';
+import { addLighters } from './lighters.js';
 import { beamTexture, glowTexture } from './textures.js';
+import { buildAvatar, poseAvatar, type Look } from './avatar.js';
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 const easeOutBack = (t: number) => 1 + 2.4 * Math.pow(t - 1, 3) + 1.4 * Math.pow(t - 1, 2);
@@ -665,16 +667,36 @@ export class CityView {
     shown: number;
     face: Vec2;
     t: number;
+    lighters: (t: number) => void;
   } | null = null;
 
   /** Your own busking spot: you, an instrument and a crowd that builds up. */
-  startPerformance(b: BuskerPlan): void {
+  startPerformance(b: BuskerPlan, look?: Look): void {
     this.stopPerformance();
     const group = new THREE.Group();
-    const model = buildBusker(b);
-    model.group.userData = {};
-    group.add(model.group);
-    this.ticks.push(...model.ticks);
+    if (look) {
+      // You, in your own look, playing on the corner.
+      const me = buildAvatar(look);
+      me.root.position.set(b.position.x, 0.2, b.position.z);
+      me.root.rotation.y = b.rotation;
+      group.add(me.root);
+      const emote = b.instrument === 'guitar' || b.instrument === 'bass' ? 'airguitar' : 'dance';
+      const start = this.clock;
+      this.perfPose = () => poseAvatar(me, emote, this.clock - start, this.clock);
+      const pool = new THREE.Mesh(geo().groundPlane, new THREE.MeshBasicMaterial({ map: glowTexture(), color: '#ffcf8a', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+      pool.scale.set(5, 1, 5);
+      pool.position.set(b.position.x, 0.25, b.position.z);
+      group.add(pool);
+      const caseMesh = new THREE.Mesh(geo().box, new THREE.MeshStandardMaterial({ color: '#7a1f2b' }));
+      caseMesh.scale.set(0.9, 0.12, 0.4);
+      caseMesh.position.set(b.position.x + Math.cos(b.rotation) * 1.1, 0.2, b.position.z - Math.sin(b.rotation) * 1.1);
+      group.add(caseMesh);
+    } else {
+      const model = buildBusker(b);
+      model.group.userData = {};
+      group.add(model.group);
+      this.ticks.push(...model.ticks);
+    }
     const max = 90;
     const crowd = new THREE.InstancedMesh(geo().sphere, MATS.instanced(), max);
     crowd.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -700,7 +722,8 @@ export class CityView {
     spot.position.set(b.position.x, 5, b.position.z);
     group.add(spot);
     this.group.add(group);
-    this.perf = { group, crowd, spots, shown: 0, face: b.position, t: 0 };
+    const lighters = addLighters(group, max, (i, out) => (i < (this.perf?.shown ?? 0) ? out.set(spots[i].x, 0.75, spots[i].z) : out.set(0, -60, 0)));
+    this.perf = { group, crowd, spots, shown: 0, face: b.position, t: 0, lighters };
   }
 
   /** How many people are watching. */
@@ -708,7 +731,10 @@ export class CityView {
     if (this.perf) this.perf.shown = Math.max(0, Math.min(this.perf.spots.length, Math.round(n)));
   }
 
+  private perfPose: (() => void) | null = null;
+
   stopPerformance(): void {
+    this.perfPose = null;
     if (!this.perf) return;
     this.perf.group.removeFromParent();
     this.perf.crowd.dispose();
@@ -733,6 +759,8 @@ export class CityView {
       p.crowd.setMatrixAt(i, this.perfM);
     }
     p.crowd.instanceMatrix.needsUpdate = true;
+    p.lighters(p.t);
+    this.perfPose?.();
   }
 
   /** Glowing arcs from a point (e.g. a label tower's roof) to places across the city. */
@@ -769,6 +797,7 @@ export class CityView {
     fireworks: Fireworks | null;
     start: number;
     color: THREE.Color;
+    lighters: (t: number) => void;
   } | null = null;
 
   /** Crowds, searchlights and (for landmarks) fireworks around a place. */
@@ -822,7 +851,8 @@ export class CityView {
       beams.push(pivot);
     }
     this.group.add(group);
-    this.gig = { group, crowd, base, light, beams, fireworks: fireworks ? new Fireworks(group, new THREE.Vector3(pos.x, height + 14, pos.z), c) : null, start: this.clock, color: c };
+    const lighters = addLighters(group, count, (i, out) => out.set(base[i].x, 0.75, base[i].z));
+    this.gig = { group, crowd, base, light, beams, fireworks: fireworks ? new Fireworks(group, new THREE.Vector3(pos.x, height + 14, pos.z), c) : null, start: this.clock, color: c, lighters };
   }
 
   stopGig(): void {
@@ -861,6 +891,7 @@ export class CityView {
       b.children[0].rotation.z = 0.3 + Math.sin(t * 0.7 + i) * 0.2;
     });
     g.fireworks?.update(dt, t);
+    g.lighters(this.clock);
   }
 
   /** Resolves a raycast hit object to a venue, landmark or building. */

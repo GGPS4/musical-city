@@ -5,6 +5,7 @@ import { geo } from './geometries.js';
 import { MATS, glow } from './materials.js';
 import { amp, box, colored, mesh, person, sign, type Tick } from './models.js';
 import { beamTexture, glowTexture, vinylTexture } from './textures.js';
+import { addLighters } from './lighters.js';
 
 /**
  * Walk-in venue interiors. Each is its own small THREE.Scene (so the city
@@ -28,6 +29,12 @@ export interface Interior {
   spawn: { x: number; z: number; yaw: number };
   ticks: Tick[];
   pickables: THREE.Object3D[];
+  /** Mosh pit in front of the stage (punk, metal and friends), if any. */
+  pit: { x: number; z: number; r: number } | null;
+  /** 0–1; the crowd goes wild (e.g. after a song request). */
+  hype: { value: number };
+  /** Makes the crowd cheer and the lights flare. */
+  cheer(): void;
   dispose(): void;
 }
 
@@ -47,7 +54,12 @@ function hash(s: string) {
 }
 
 /** A dancing crowd filling a rectangle, bobbing to roughly 122 bpm. */
-function crowdIn(scene: THREE.Object3D, ticks: Tick[], cx: number, cz: number, w: number, d: number, n: number, seed: number, keepClear: RoomBox[] = []) {
+interface CrowdOpts {
+  hype?: { value: number };
+  pit?: { x: number; z: number; r: number } | null;
+}
+
+function crowdIn(scene: THREE.Object3D, ticks: Tick[], cx: number, cz: number, w: number, d: number, n: number, seed: number, keepClear: RoomBox[] = [], opts: CrowdOpts = {}) {
   const r = rand(seed);
   const spots: { x: number; z: number; s: number; ph: number }[] = [];
   let tries = 0;
@@ -66,18 +78,41 @@ function crowdIn(scene: THREE.Object3D, ticks: Tick[], cx: number, cz: number, w
   const q = new THREE.Quaternion();
   const p = new THREE.Vector3();
   const sc = new THREE.Vector3();
+  // People inside the pit run a circle pit around its centre.
+  const pit = opts.pit ?? null;
+  const inPit = spots.map((s) => (pit ? Math.hypot(s.x - pit.x, s.z - pit.z) < pit.r : false));
+  const pitR = spots.map((s) => (pit ? Math.max(1.2, Math.hypot(s.x - pit.x, s.z - pit.z)) : 0));
+  const pitA = spots.map((s) => (pit ? Math.atan2(s.z - pit.z, s.x - pit.x) : 0));
+  const now = spots.map((s) => ({ x: s.x, z: s.z, y: 0 }));
+  let last = 0;
   ticks.push((t) => {
+    const dt = Math.min(0.1, t - last);
+    last = t;
     const beat = (t * 122) / 60;
+    const hype = opts.hype ? opts.hype.value : 0;
+    if (opts.hype) opts.hype.value = Math.max(0, hype - dt * 0.12);
     spots.forEach((s, i) => {
-      const hop = Math.max(0, Math.sin((beat + s.ph * 0.15) * Math.PI * 2)) * 0.14;
-      m.compose(p.set(s.x, hop, s.z), q, sc.set(0.24 * H * s.s, 0.5 * H * s.s, 0.24 * H * s.s));
+      let hop = Math.max(0, Math.sin((beat + s.ph * 0.15) * Math.PI * 2)) * 0.14 * (1 + hype * 3);
+      let x = s.x;
+      let z = s.z;
+      if (pit && inPit[i]) {
+        pitA[i] += dt * (1.6 + (i % 3) * 0.2);
+        x = pit.x + Math.cos(pitA[i]) * pitR[i] + Math.sin(t * 7 + i) * 0.15;
+        z = pit.z + Math.sin(pitA[i]) * pitR[i] + Math.cos(t * 6 + i) * 0.15;
+        hop = Math.abs(Math.sin(t * 8 + s.ph)) * 0.3;
+      }
+      now[i].x = x;
+      now[i].z = z;
+      now[i].y = hop;
+      m.compose(p.set(x, hop, z), q, sc.set(0.24 * H * s.s, 0.5 * H * s.s, 0.24 * H * s.s));
       bodies.setMatrixAt(i, m);
-      m.compose(p.set(s.x, hop + 0.62 * H * s.s, s.z), q, sc.setScalar(0.2 * H * s.s));
+      m.compose(p.set(x, hop + 0.62 * H * s.s, z), q, sc.setScalar(0.2 * H * s.s));
       heads.setMatrixAt(i, m);
     });
     bodies.instanceMatrix.needsUpdate = true;
     heads.instanceMatrix.needsUpdate = true;
   });
+  ticks.push(addLighters(scene, spots.length, (i, out) => out.set(now[i].x, now[i].y + 0.62 * H * spots[i].s, now[i].z)));
 }
 
 /** A band member with an instrument, swaying. */
@@ -166,6 +201,7 @@ export function buildInterior(v: VenuePlan, artistNames: string[], env: THREE.Te
   const hd = D / 2;
   const open = t === 'rooftop';
 
+  const hype = { value: 0 };
   scene.background = new THREE.Color(open ? '#070817' : '#050507');
   scene.fog = new THREE.Fog(open ? '#0a0b1a' : '#0b0a10', 18, open ? 160 : 70);
 
@@ -176,7 +212,7 @@ export function buildInterior(v: VenuePlan, artistNames: string[], env: THREE.Te
   const key = new THREE.PointLight('#ffd9a8', 35, 40, 1.5);
   key.position.set(0, (Hh || 8) - 0.8, hd * 0.3);
   scene.add(wash, key);
-  ticks.push((time) => (wash.intensity = 45 + Math.max(0, Math.sin(time * 12.8)) * 40));
+  ticks.push((time) => (wash.intensity = (45 + Math.max(0, Math.sin(time * 12.8)) * 40) * (1 + hype.value * 1.5)));
 
   // Shell.
   const floorMat = t === 'club' ? colored('#101014', 0.35, 0.3) : t === 'warehouse' ? colored('#3a3a3c', 0.95) : t === 'record-store' ? colored('#6b4a32', 0.7) : colored('#2b1d18', 0.6);
@@ -223,6 +259,14 @@ export function buildInterior(v: VenuePlan, artistNames: string[], env: THREE.Te
   const stageZ = -hd + stageDepth / 2 + 0.2;
   const stageH = t === 'bar' ? 0.5 : 1.0;
 
+  const moshy = ['punk', 'metal', 'hard-rock', 'garage'].some((x) => v.genres.includes(x as never)) && ['bar', 'club', 'warehouse', 'rooftop'].includes(t);
+  const pit = moshy ? { x: 0, z: stageZ + stageDepth / 2 + Math.min(5.5, (D - stageDepth) * 0.3), r: Math.min(4, W * 0.2) } : null;
+  if (pit) {
+    // A scuffed ring on the floor marks the pit.
+    const ring = new THREE.Mesh(new THREE.RingGeometry(pit.r - 0.15, pit.r, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#3a2a2a', transparent: true, opacity: 0.6 }));
+    ring.position.set(pit.x, 0.01, pit.z);
+    scene.add(ring);
+  }
   if (t !== 'record-store') {
     // Stage, backline and the band.
     box(colored('#141416', 0.6), 0, 0, stageZ, stageW, stageH, stageDepth, scene);
@@ -314,7 +358,7 @@ export function buildInterior(v: VenuePlan, artistNames: string[], env: THREE.Te
     // Curtains.
     for (const sx of [-1, 1]) box(colored('#8a1020', 0.9), sx * (stageW / 2 + 0.6), 0, stageZ, 1.2, Hh, 0.6, scene, false);
     // A seated audience in about half the seats.
-    crowdIn(scene, ticks, 0, stageZ + stageDepth / 2 + 3 + rows * 0.8, W - 6, rows * 1.4, 26, seed);
+    crowdIn(scene, ticks, 0, stageZ + stageDepth / 2 + 3 + rows * 0.8, W - 6, rows * 1.4, 26, seed, [], { hype });
   } else if (t === 'record-store') {
     // Crate tables down the middle, shelves of sleeves on the walls, a counter and a listening booth.
     const colors = [neon, neon2, '#ff4f79', '#3ea0ff', '#ffd23f', '#59cd90', '#f2ead8', '#b8321c'];
@@ -355,7 +399,7 @@ export function buildInterior(v: VenuePlan, artistNames: string[], env: THREE.Te
     const back = hd - 2.5;
     const n = t === 'bar' ? 24 : t === 'rooftop' ? 36 : t === 'club' ? 56 : 52;
     // Keep a clear path in from the door.
-    crowdIn(scene, ticks, 1.2, (front + back) / 2, W - 5, back - front, n, seed, [...boxes, { x: 0, z: hd - 4, hw: 2.6, hd: 4 }]);
+    crowdIn(scene, ticks, 1.2, (front + back) / 2, W - 5, back - front, n, seed, [...boxes, { x: 0, z: hd - 4, hw: 2.6, hd: 4 }], { hype, pit });
   }
 
   return {
@@ -367,6 +411,11 @@ export function buildInterior(v: VenuePlan, artistNames: string[], env: THREE.Te
     spawn: { x: 0, z: hd - 1.6, yaw: 0 },
     ticks,
     pickables,
+    pit,
+    hype,
+    cheer() {
+      hype.value = 1;
+    },
     dispose() {
       scene.traverse((o) => {
         const m = o as THREE.Mesh;

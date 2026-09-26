@@ -243,12 +243,81 @@ export class WalkMode {
     );
   }
 
+  private fx = { pitch: 0, roll: 0, y: 0 };
+
   private applyRotation() {
-    this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
+    this.camera.rotation.set(this.pitch + this.fx.pitch, this.yaw, this.fx.roll, 'YXZ');
+  }
+
+  /** Your own emote: what it feels like from behind your eyes. */
+  private emoteState: { kind: string; start: number } | null = null;
+  private clock = 0;
+
+  emote(kind: string): void {
+    this.emoteState = { kind, start: this.clock };
+  }
+
+  get emoting(): string | null {
+    return this.emoteState?.kind ?? null;
+  }
+
+  /** A shove from the mosh pit (respects walls and obstacles). */
+  nudge(dx: number, dz: number, shake = 0): void {
+    const p = this.camera.position;
+    if (!this.blocked(p.x + dx, p.z + dz)) {
+      p.x += dx;
+      p.z += dz;
+    } else if (!this.blocked(p.x + dx, p.z)) p.x += dx;
+    else if (!this.blocked(p.x, p.z + dz)) p.z += dz;
+    this.shake = Math.max(this.shake, shake);
+  }
+
+  private shake = 0;
+
+  private updateEffects(dt: number) {
+    this.clock += dt;
+    const e = this.emoteState;
+    const t = e ? this.clock - e.start : 0;
+    if (e && t > 5) this.emoteState = null;
+    let pitch = 0;
+    let roll = 0;
+    let y = 0;
+    switch (this.emoteState?.kind) {
+      case 'headbang':
+        pitch = -0.1 - Math.abs(Math.sin(t * 7)) * 0.45;
+        break;
+      case 'airguitar':
+        roll = Math.sin(t * 6) * 0.08;
+        pitch = -0.12 + Math.sin(t * 12) * 0.05;
+        break;
+      case 'dance':
+        y = Math.abs(Math.sin(t * 6.4)) * 0.22;
+        roll = Math.sin(t * 3.2) * 0.1;
+        break;
+      case 'surf': {
+        y = 1.3 + Math.sin(t * 3) * 0.12;
+        roll = Math.sin(t * 2) * 0.15;
+        pitch = 0.1;
+        // Carried towards the stage inside a venue.
+        if (this.room) this.nudge(Math.sin(t * 1.3) * dt * 0.6, -dt * 1.4);
+        break;
+      }
+    }
+    if (this.shake > 0) {
+      this.shake = Math.max(0, this.shake - dt * 2.5);
+      pitch += (Math.random() - 0.5) * this.shake * 0.12;
+      roll += (Math.random() - 0.5) * this.shake * 0.15;
+    }
+    const k = 1 - Math.exp(-dt * 12);
+    this.fx.pitch += (pitch - this.fx.pitch) * k;
+    this.fx.roll += (roll - this.fx.roll) * k;
+    this.fx.y += (y - this.fx.y) * k;
+    this.applyRotation();
   }
 
   update(dt: number, time: number): void {
     if (!this.active || !this.plan) return;
+    this.updateEffects(dt);
     const k = this.keys;
     let fwd = (k.has('w') || k.has('arrowup') ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0) - this.stick.y;
     let side = (k.has('d') ? 1 : 0) - (k.has('a') ? 1 : 0) + this.stick.x;
@@ -278,6 +347,7 @@ export class WalkMode {
       else if (!this.blocked(p.x, p.z + dz)) p.z += dz;
       p.y = EYE + Math.abs(Math.sin(time * 9)) * 0.035 * Math.min(1, Math.hypot(fwd, side));
     }
+    p.y = EYE + this.fx.y + (dx || dz ? Math.abs(Math.sin(time * 9)) * 0.035 : 0);
 
     if (this.room) {
       if (p.z > this.room.hd - 0.6) this.onDoor?.();
