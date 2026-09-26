@@ -12,7 +12,7 @@ const EYE = 1.5;
 const SPEED = 8;
 const RADIUS = 0.8;
 
-interface Box {
+export interface Box {
   x: number;
   z: number;
   hw: number;
@@ -75,6 +75,34 @@ export class WalkMode {
   }
 
   private plan: CityPlan | null = null;
+  /** When set, you're inside a venue: a room centred on the origin with the door on the +z wall. */
+  private room: { hw: number; hd: number; boxes: Box[] } | null = null;
+  /** Called when you walk out through the door of a room. */
+  onDoor: (() => void) | null = null;
+
+  setRoom(room: { hw: number; hd: number; boxes: Box[] } | null, spawn?: { x: number; z: number; yaw: number }): void {
+    this.room = room;
+    this.keys.clear();
+    if (room && spawn) {
+      this.camera.position.set(spawn.x, EYE, spawn.z);
+      this.yaw = spawn.yaw;
+      this.pitch = 0.05;
+      this.applyRotation();
+    }
+  }
+
+  get inRoom(): boolean {
+    return !!this.room;
+  }
+
+  /** Moves you to the nearest open street spot near a point, facing another point. */
+  teleport(at: Vec2, lookAt: Vec2): void {
+    const start = this.spawnNear(at);
+    this.camera.position.set(start.x, EYE, start.z);
+    this.yaw = Math.atan2(-(lookAt.x - start.x), -(lookAt.z - start.z));
+    this.pitch = 0.05;
+    this.applyRotation();
+  }
 
   private key(x: number, z: number) {
     return `${Math.round(x / this.cellSize)},${Math.round(z / this.cellSize)}`;
@@ -87,6 +115,14 @@ export class WalkMode {
   }
 
   private blocked(x: number, z: number): boolean {
+    const room = this.room;
+    if (room) {
+      if (Math.abs(x) > room.hw - RADIUS || z < -room.hd + RADIUS) return true;
+      // The doorway is the only gap in the front wall.
+      if (z > room.hd - RADIUS && Math.abs(x) > 1.0) return true;
+      if (z > room.hd + 0.2) return true;
+      return room.boxes.some((b) => Math.abs(x - b.x) < b.hw + RADIUS && Math.abs(z - b.z) < b.hd + RADIUS);
+    }
     const plan = this.plan;
     if (!plan) return false;
     const lim = plan.size / 2 + 2;
@@ -243,6 +279,10 @@ export class WalkMode {
       p.y = EYE + Math.abs(Math.sin(time * 9)) * 0.035 * Math.min(1, Math.hypot(fwd, side));
     }
 
+    if (this.room) {
+      if (p.z > this.room.hd - 0.6) this.onDoor?.();
+      return;
+    }
     if (time - this.lastNearCheck > 0.4) {
       this.lastNearCheck = time;
       let best: VenuePlan | null = null;

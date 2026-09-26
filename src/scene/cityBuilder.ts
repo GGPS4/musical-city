@@ -13,7 +13,7 @@ const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 const easeOutBack = (t: number) => 1 + 2.4 * Math.pow(t - 1, 3) + 1.4 * Math.pow(t - 1, 2);
 
 export interface PickHit {
-  kind: 'venue' | 'landmark' | 'building' | 'label' | 'busker' | 'home' | 'billboard';
+  kind: 'venue' | 'landmark' | 'building' | 'label' | 'busker' | 'home' | 'billboard' | 'crate';
   id: string | number;
 }
 

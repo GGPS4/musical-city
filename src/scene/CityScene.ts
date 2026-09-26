@@ -11,8 +11,22 @@ import { CityView, type PickHit } from './cityBuilder.js';
 import { LabelLayer, type LabelKind } from './labels.js';
 import { WalkMode, type Nearby } from './walk.js';
 import { MOOD_BY_ID, MoodState, Rain, Sparkles, type MoodId } from './mood.js';
-import { glowTexture } from './textures.js';
+import { glowTexture, signTexture } from './textures.js';
 import { cityUniforms } from './materials.js';
+import { buildInterior, type Interior } from './interior.js';
+import type { VenuePlan } from '../types.js';
+
+export interface FriendState {
+  id: string;
+  name: string;
+  color: string;
+  x: number;
+  z: number;
+  yaw: number;
+  walking: boolean;
+  inside: string | null;
+  wave?: number;
+}
 
 export interface SceneEvents {
   onPick: (hit: PickHit | null) => void;
@@ -306,6 +320,21 @@ export class CityScene {
     this.labels.add('venue', v.id, v.name, null, new THREE.Vector3(v.position.x, (model?.height ?? 4) + 5.5, v.position.z), [0, plan.size * 0.42]);
   }
 
+  /** Where the "ears" are, for city sounds: your feet when walking, otherwise the point you're looking at. */
+  listener(): { x: number; z: number; height: number; walking: boolean; inside: boolean; rain: number; night: boolean } {
+    const walking = this.walk.active;
+    const p = walking ? this.camera.position : this.controls.target;
+    return {
+      x: p.x,
+      z: p.z,
+      height: walking ? 1.5 : this.camera.position.y,
+      walking,
+      inside: !!this.interior,
+      rain: this.mood.nums.rain,
+      night: this.moodId !== 'summer',
+    };
+  }
+
   /** Point on the ground the camera is looking at. */
   lookTarget(): Vec2 {
     return { x: this.controls.target.x, z: this.controls.target.z };
@@ -469,6 +498,7 @@ export class CityScene {
 
   exitWalk(): void {
     if (!this.walk.active) return;
+    this.exitInterior(false);
     const look = this.walk.lookPoint();
     this.walk.exit();
     this.walkLight.visible = false;
@@ -482,6 +512,134 @@ export class CityScene {
     this.controls.update();
   }
 
+  /* ---------------- friends walking with you ---------------- */
+
+  private friends = new Map<string, { group: THREE.Group; person: THREE.Group; orb: THREE.Mesh; target: FriendState; jump: number }>();
+
+  /** Shows (and smoothly moves) the other people in your room. */
+  setFriends(list: FriendState[]): void {
+    const seen = new Set<string>();
+    for (const f of list) {
+      seen.add(f.id);
+      let a = this.friends.get(f.id);
+      if (!a) {
+        const group = new THREE.Group();
+        const person = new THREE.Group();
+        const bodyMat = new THREE.MeshStandardMaterial({ color: f.color, roughness: 0.6, emissive: f.color, emissiveIntensity: 0.25 });
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, 1.15, 12).translate(0, 0.58, 0), bodyMat);
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 12), new THREE.MeshStandardMaterial({ color: '#e2b99a', roughness: 0.7 }));
+        head.position.y = 1.45;
+        const ring = new THREE.Mesh(new THREE.RingGeometry(0.7, 0.95, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(f.color).multiplyScalar(2), toneMapped: false, transparent: true, opacity: 0.8 }));
+        ring.position.y = 0.05;
+        person.add(body, head, ring);
+        const orb = new THREE.Mesh(new THREE.SphereGeometry(1.1, 20, 14), new THREE.MeshBasicMaterial({ color: new THREE.Color(f.color).multiplyScalar(2.2), toneMapped: false }));
+        const { tex, aspect } = signTexture(f.name, f.color, 'marquee');
+        const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+        tag.scale.set(0.5 * aspect, 0.5, 1);
+        tag.position.y = 2.2;
+        tag.renderOrder = 10;
+        group.add(person, orb, tag);
+        group.userData.tag = tag;
+        group.position.set(f.x, f.walking ? 0 : 14, f.z);
+        a = { group, person, orb, target: f, jump: 0 };
+        this.friends.set(f.id, a);
+      }
+      if (f.wave && f.wave !== a.target.wave) a.jump = 1;
+      a.target = f;
+    }
+    for (const [id, a] of this.friends) {
+      if (!seen.has(id)) {
+        a.group.removeFromParent();
+        this.friends.delete(id);
+      }
+    }
+  }
+
+  private updateFriends(dt: number) {
+    const inside = this.interior?.venueId ?? null;
+    for (const a of this.friends.values()) {
+      const f = a.target;
+      const parent = f.inside ? (f.inside === inside && this.interior ? this.interior.scene : null) : inside ? null : this.scene;
+      if (a.group.parent !== parent) {
+        a.group.removeFromParent();
+        if (parent) {
+          parent.add(a.group);
+          a.group.position.set(f.x, f.walking ? 0 : 14, f.z);
+        }
+      }
+      if (!parent) continue;
+      const k = 1 - Math.exp(-dt * 8);
+      const y = f.walking ? 0 : 14;
+      a.group.position.x += (f.x - a.group.position.x) * k;
+      a.group.position.z += (f.z - a.group.position.z) * k;
+      a.jump = Math.max(0, a.jump - dt * 1.6);
+      a.group.position.y += (y + Math.sin(a.jump * Math.PI * 3) * a.jump * 0.8 - a.group.position.y) * k;
+      a.person.visible = f.walking;
+      a.orb.visible = !f.walking;
+      a.person.rotation.y = f.yaw;
+      const tag = a.group.userData.tag as THREE.Sprite;
+      tag.position.y = f.walking ? 2.2 : 2.4;
+      const dist = this.camera.position.distanceTo(a.group.position);
+      const s = Math.max(1, dist / 14);
+      tag.scale.set((tag.scale.x / tag.scale.y) * 0.5 * s, 0.5 * s, 1);
+    }
+  }
+
+  /** Your own position for friends: where you stand when walking, or where you're looking. */
+  selfState(): { x: number; z: number; yaw: number; walking: boolean; inside: string | null } {
+    const walking = this.walk.active;
+    const p = walking ? this.camera.position : this.controls.target;
+    const dir = new THREE.Vector3();
+    this.camera.getWorldDirection(dir);
+    return { x: p.x, z: p.z, yaw: Math.atan2(dir.x, dir.z), walking, inside: this.interior?.venueId ?? null };
+  }
+
+  /* ---------------- venue interiors ---------------- */
+
+  private interior: Interior | null = null;
+  private outside: { venue: VenuePlan } | null = null;
+
+  get insideVenue(): string | null {
+    return this.interior?.venueId ?? null;
+  }
+
+  /** Steps through a venue's door (you must already be walking). */
+  enterInterior(v: VenuePlan, artistNames: string[]): void {
+    if (!this.walk.active) return;
+    this.exitInterior(false);
+    this.interior = buildInterior(v, artistNames, this.scene.environment);
+    this.outside = { venue: v };
+    this.walk.setRoom({ hw: this.interior.hw, hd: this.interior.hd, boxes: this.interior.boxes }, this.interior.spawn);
+    this.labels.setDimmed(true);
+    this.setRenderScene(this.interior.scene);
+  }
+
+  /** Back out onto the street in front of the venue. */
+  exitInterior(placeOutside = true): void {
+    if (!this.interior) return;
+    const v = this.outside?.venue;
+    this.interior.dispose();
+    this.interior = null;
+    this.walk.setRoom(null);
+    this.setRenderScene(this.scene);
+    this.labels.setDimmed(false);
+    if (placeOutside && v) {
+      const fx = Math.sin(v.rotation);
+      const fz = Math.cos(v.rotation);
+      const out = { x: v.position.x + fx * (v.footprint + 4), z: v.position.z + fz * (v.footprint + 4) };
+      this.walk.teleport(out, { x: out.x + fx * 10, z: out.z + fz * 10 });
+    }
+    this.outside = null;
+  }
+
+  private renderScene: THREE.Scene = this.scene;
+
+  private setRenderScene(scene: THREE.Scene) {
+    this.renderScene = scene;
+    const pass = this.composer?.passes[0] as RenderPass | undefined;
+    if (pass) pass.scene = scene;
+  }
+
   get walking(): boolean {
     return this.walk.active;
   }
@@ -493,6 +651,14 @@ export class CityScene {
     const rect = this.renderer.domElement.getBoundingClientRect();
     this.pointer.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
     this.raycaster.setFromCamera(this.pointer, this.camera);
+    if (this.interior) {
+      for (const h of this.raycaster.intersectObjects(this.interior.pickables, true)) {
+        let o: THREE.Object3D | null = h.object;
+        while (o && !o.userData.kind) o = o.parent;
+        if (o?.userData.kind === 'crate') return { kind: 'crate', id: String(o.userData.id) };
+      }
+      return null;
+    }
     const hits = this.raycaster.intersectObjects(this.city.pickables, true);
     for (const h of hits) {
       if (!h.object.visible && !h.object.userData.pickProxy) continue;
@@ -529,6 +695,7 @@ export class CityScene {
     const city = this.city;
     city?.update(dt);
     this.applyMood(dt);
+    this.updateFriends(dt);
     if (this.viz && city?.finished && this.time - this.vizLast > 1 / 30) {
       this.vizLast = this.time;
       city.visualise(this.viz());
@@ -565,8 +732,12 @@ export class CityScene {
       this.controls.update();
     }
 
+    if (this.interior) {
+      for (const tick of this.interior.ticks) tick(this.time, dt);
+      this.camera.updateMatrixWorld();
+    }
     if (this.composer) this.composer.render();
-    else this.renderer.render(this.scene, this.camera);
+    else this.renderer.render(this.renderScene, this.camera);
     this.labels.update(this.camera, this.controls.target, this.width, this.height, this.walk.active);
     this.adapt();
   }

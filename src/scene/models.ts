@@ -1097,3 +1097,6 @@ export function buildBillboard(b: BillboardPlan, artistName: string): BillboardM
     },
   };
 }
+
+/** Shared building blocks for other model files (interiors). */
+export { amp, box, colored, mesh, person, sign };
